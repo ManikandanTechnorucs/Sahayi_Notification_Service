@@ -1,0 +1,49 @@
+# Project Overview & Stack Rules
+
+## Tech Stack
+- **Runtime**: Node.js (v20 LTS)
+- **Framework**: Express.js
+- **Databases**: MySQL · MongoDB · TimescaleDB
+- **Messaging**: Azure Service Bus
+- **API Layer**: Azure API Management (APIM) / Application Gateway
+- **Paradigms**: SOLID Principles · OOP
+
+## Global Rules (Always Apply)
+- Use **ESModules** (`import`/`export`) unless legacy CJS is forced.
+- All async operations must use `async/await`; never mix `.then()` chains with `await`.
+- Never commit secrets. Use `process.env` via `dotenv` for all credentials.
+- Every public method, class, and module must have a **JSDoc** comment.
+- Enforce strict mode: `'use strict'` in CJS, or use ESM (implicit strict).
+- Lint: ESLint with `eslint-config-airbnb-base`. Format: Prettier (2-space indent, single quotes).
+- Minimum Node version guard in `package.json` → `"engines": { "node": ">=20.0.0" }`.
+
+## Folder Conventions
+```
+src/
+  config/          # env & service configs
+  controllers/     # Express route handlers (thin layer)
+  services/        # Business logic (core domain)
+  repositories/    # Data-access layer (DB queries only)
+  models/          # ORM/ODM models & schema definitions
+  middlewares/     # Express middlewares
+  routes/          # Express router definitions
+  events/          # Azure Service Bus producers & consumers
+  utils/           # Pure helpers & shared utilities
+  errors/          # Custom error classes
+  types/           # JSDoc typedef files or TS interfaces
+tests/
+  unit/
+  integration/
+  e2e/
+```
+
+## Naming Conventions
+| Artefact | Convention | Example |
+|---|---|---|
+| Files | kebab-case | `user-service.js` |
+| Classes | PascalCase | `UserService` |
+| Functions/vars | camelCase | `getUserById` |
+| Constants | UPPER_SNAKE | `MAX_RETRY_COUNT` |
+| DB tables | snake_case | `order_items` |
+| Mongo collections | camelCase plural | `userProfiles` |
+| Env vars | UPPER_SNAKE | `DB_HOST` |

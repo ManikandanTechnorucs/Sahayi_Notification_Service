@@ -1,0 +1,19 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "SERVICE_BUS_CONNECTION_STRING": "<your-service-bus-connection-string>",
+    "SERVICE_BUS_QUEUE_NAME": "notification-dispatch",
+    "SERVICE_BUS_RETRY_QUEUE_NAME": "notification-retry",
+    "DATABASE_URL": "mysql://user:password@localhost:3306/sahayi",
+    "FIREBASE_PROJECT_ID": "sahayipushnotification",
+    "FIREBASE_PROJECT_NUMBER": "27324304081",
+    "FIREBASE_STORAGE_BUCKET": "sahayipushnotification.firebasestorage.app",
+    "FIREBASE_ANDROID_PACKAGE_NAME": "com.sahayi.mobile",
+    "FIREBASE_ANDROID_APP_ID": "1:27324304081:android:cfbc09eb40f750224013f0",
+    "FIREBASE_SERVICE_ACCOUNT_PATH": "./firebase-service-account.json",
+    "MAX_RETRY_COUNT": "3",
+    "LOG_LEVEL": "info"
+  }
+}

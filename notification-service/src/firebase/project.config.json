@@ -1,0 +1,10 @@
+{
+  "source": "google-services.json",
+  "projectId": "sahayipushnotification",
+  "projectNumber": "27324304081",
+  "storageBucket": "sahayipushnotification.firebasestorage.app",
+  "android": {
+    "packageName": "com.sahayi.mobile",
+    "appId": "1:27324304081:android:cfbc09eb40f750224013f0"
+  }
+}

@@ -1,0 +1,112 @@
+# MongoDB Rules
+
+## Driver & Connection
+- Use the official `mongodb` driver or **Mongoose** (prefer Mongoose for schema enforcement).
+- Maintain a **singleton connection**; never open a new connection per request.
+- Gracefully close the connection on `SIGTERM`/`SIGINT`.
+
+```js
+// src/config/mongo.js
+import mongoose from 'mongoose';
+import { env } from './env.js';
+
+let isConnected = false;
+
+export async function connectMongo() {
+  if (isConnected) return;
+  await mongoose.connect(env.MONGO_URI, {
+    maxPoolSize:       10,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS:   45000,
+  });
+  isConnected = true;
+  console.info('[MongoDB] Connected');
+}
+
+mongoose.connection.on('error', (err) => console.error('[MongoDB] Error:', err));
+
+process.on('SIGTERM', async () => {
+  await mongoose.connection.close();
+  console.info('[MongoDB] Connection closed');
+});
+```
+
+## Schema / Model Rules
+- Define schemas in `src/models/`; one file per collection.
+- Always enable **timestamps** (`{ timestamps: true }`).
+- Use **strict mode** (default); never disable it.
+- Add indexes directly in the schema definition using `index: true` or `schema.index({})`.
+- Use `lean()` for read-only queries (returns plain JS objects, ~10× faster).
+
+```js
+// src/models/product-model.js
+import { Schema, model } from 'mongoose';
+
+const variantSchema = new Schema({
+  sku:   { type: String, required: true },
+  price: { type: Number, required: true, min: 0 },
+  stock: { type: Number, required: true, default: 0 },
+}, { _id: false });
+
+const productSchema = new Schema({
+  name:        { type: String, required: true, trim: true, maxlength: 200 },
+  category:    { type: String, required: true, index: true },
+  tags:        [{ type: String }],
+  variants:    [variantSchema],
+  isActive:    { type: Boolean, default: true, index: true },
+  metadata:    { type: Map, of: String },
+}, {
+  timestamps: true,
+  collection: 'products',
+});
+
+productSchema.index({ name: 'text', 'tags': 1 });
+productSchema.index({ category: 1, isActive: 1 });
+
+export const Product = model('Product', productSchema);
+```
+
+## Repository Pattern for Mongo
+
+```js
+// src/repositories/product-repository.js
+import { Product } from '../models/product-model.js';
+
+export class ProductRepository {
+  async findById(id) {
+    return Product.findById(id).lean();
+  }
+
+  async findAll({ category, page = 1, limit = 20 } = {}) {
+    const filter = category ? { category, isActive: true } : { isActive: true };
+    return Product.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+  }
+
+  async create(data) {
+    const product = new Product(data);
+    return product.save();
+  }
+
+  async updateById(id, patch) {
+    return Product.findByIdAndUpdate(id, { $set: patch }, { new: true, runValidators: true }).lean();
+  }
+
+  async deleteById(id) {
+    return Product.findByIdAndDelete(id);
+  }
+}
+```
+
+## Best Practices
+- Never use `findOneAndUpdate` without `{ new: true }` if you need the updated doc.
+- Use `$set` for partial updates; avoid replacing the whole document unintentionally.
+- Avoid deeply nested documents (max 2 levels); use references (`ObjectId`) for large sub-docs.
+- Paginate all list queries; never return unbounded results.
+- Validate ObjectId format before querying: `mongoose.isValidObjectId(id)`.
+- Use **aggregation pipelines** for analytics; avoid client-side aggregation.
+- Run `explain('executionStats')` in dev to verify index usage on complex queries.
+- Store dates as native `Date` (not strings); always in **UTC**.

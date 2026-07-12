@@ -1,0 +1,128 @@
+# SOLID Principles & OOP Rules
+
+## S — Single Responsibility Principle
+- Each class/module must have **one reason to change**.
+- Controllers → only parse request/response.
+- Services → only business logic.
+- Repositories → only DB interaction.
+- Never place SQL/Mongo queries inside a controller or service directly.
+
+```js
+// ✅ CORRECT
+class OrderService {
+  constructor(orderRepo, paymentService) {
+    this.orderRepo = orderRepo;
+    this.paymentService = paymentService;
+  }
+  async placeOrder(orderData) {
+    const order = await this.orderRepo.create(orderData);
+    await this.paymentService.charge(order);
+    return order;
+  }
+}
+
+// ❌ WRONG — service doing DB + business + HTTP
+class OrderService {
+  async placeOrder(req, res) {
+    const order = await db.query('INSERT INTO orders ...');
+    res.json(order);
+  }
+}
+```
+
+## O — Open/Closed Principle
+- Classes should be **open for extension, closed for modification**.
+- Prefer composition and strategy pattern over modifying existing classes.
+- Use abstract base classes or interfaces (via JSDoc `@interface`) to define contracts.
+
+```js
+// Base notifier — closed for modification
+class Notifier {
+  async send(message) { throw new Error('send() must be implemented'); }
+}
+
+// Extensions — open
+class EmailNotifier extends Notifier {
+  async send(message) { /* email logic */ }
+}
+class SmsNotifier extends Notifier {
+  async send(message) { /* sms logic */ }
+}
+```
+
+## L — Liskov Substitution Principle
+- Subclasses must be substitutable for their base class without altering program correctness.
+- Never override a method to throw if the parent didn't.
+- Do not narrow parameter types or widen return types in subclasses.
+
+## I — Interface Segregation Principle
+- Define fine-grained JSDoc `@interface` typedefs; don't force classes to implement methods they don't use.
+- Split large repository interfaces (e.g., `IReadRepository` + `IWriteRepository`).
+
+```js
+/**
+ * @interface
+ * @typedef {Object} IReadRepository
+ * @property {function(string): Promise<Object>} findById
+ * @property {function(Object): Promise<Object[]>} findAll
+ */
+
+/**
+ * @interface
+ * @typedef {Object} IWriteRepository
+ * @property {function(Object): Promise<Object>} create
+ * @property {function(string, Object): Promise<Object>} update
+ * @property {function(string): Promise<void>} delete
+ */
+```
+
+## D — Dependency Inversion Principle
+- High-level modules (services) must not depend on low-level modules (repositories) directly.
+- Depend on **abstractions** (interfaces / constructor-injected deps).
+- Wire dependencies in a `container.js` or use a lightweight DI container (e.g., `awilix`).
+
+```js
+// container.js — composition root
+import { createContainer, asClass, asValue } from 'awilix';
+import { UserService } from './services/user-service.js';
+import { UserRepository } from './repositories/user-repository.js';
+import { db } from './config/db.js';
+
+const container = createContainer();
+container.register({
+  db: asValue(db),
+  userRepository: asClass(UserRepository).scoped(),
+  userService: asClass(UserService).scoped(),
+});
+export default container;
+```
+
+## OOP Rules
+- Prefer **composition over inheritance** for reuse.
+- Limit inheritance depth to **2 levels** max.
+- Always call `super()` in constructors of derived classes.
+- Mark methods not intended for override with a `@final` JSDoc tag (convention).
+- Use **private fields** (`#field`) for encapsulation in ES2022+ classes.
+- Getters/setters only when validation or computed logic is required.
+
+```js
+class BaseRepository {
+  #db;
+  constructor(db, tableName) {
+    this.#db = db;
+    this.tableName = tableName;
+  }
+  async findById(id) {
+    return this.#db.query(`SELECT * FROM ${this.tableName} WHERE id = ?`, [id]);
+  }
+}
+
+class UserRepository extends BaseRepository {
+  constructor(db) {
+    super(db, 'users');
+  }
+  async findByEmail(email) {
+    return this.db.query('SELECT * FROM users WHERE email = ?', [email]);
+  }
+}
+```

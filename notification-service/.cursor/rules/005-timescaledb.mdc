@@ -1,0 +1,158 @@
+# TimescaleDB Rules
+
+## Overview
+TimescaleDB is a PostgreSQL extension optimised for time-series data.
+Use it for: metrics, IoT readings, event logs, audit trails, telemetry.
+
+## Driver
+- Use `pg` (node-postgres) with a pool, or `knex` with the `pg` dialect.
+- Never use an ORM (Sequelize/Prisma) for TimescaleDB hypertables; raw SQL or query builder only.
+
+```js
+// src/config/timescale.js
+import pg from 'pg';
+import { env } from './env.js';
+
+export const tsPool = new pg.Pool({
+  host:     env.TIMESCALE_HOST,
+  port:     env.TIMESCALE_PORT ?? 5432,
+  database: env.TIMESCALE_DB,
+  user:     env.TIMESCALE_USER,
+  password: env.TIMESCALE_PASS,
+  max:      env.TIMESCALE_POOL_MAX ?? 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+});
+```
+
+## Hypertable Design Rules
+- Always define the **time column** as `TIMESTAMPTZ NOT NULL` (timezone-aware).
+- Call `create_hypertable()` in migrations — never in application code.
+- Choose `chunk_time_interval` based on query patterns (default 7 days; use 1 day for high-cardinality).
+- Add a **space partition** on a high-cardinality column (e.g., `device_id`) for large datasets.
+
+```sql
+-- Migration: create sensor_readings hypertable
+CREATE TABLE sensor_readings (
+  time        TIMESTAMPTZ     NOT NULL,
+  device_id   UUID            NOT NULL,
+  metric      VARCHAR(100)    NOT NULL,
+  value       DOUBLE PRECISION NOT NULL,
+  unit        VARCHAR(20),
+  tags        JSONB
+);
+
+SELECT create_hypertable(
+  'sensor_readings',
+  'time',
+  chunk_time_interval => INTERVAL '1 day',
+  partitioning_column => 'device_id',
+  number_partitions   => 4
+);
+
+-- Always index on (device_id, time DESC) for device-centric queries
+CREATE INDEX idx_sensor_device_time ON sensor_readings (device_id, time DESC);
+CREATE INDEX idx_sensor_metric      ON sensor_readings (metric, time DESC);
+```
+
+## Repository Pattern
+
+```js
+// src/repositories/sensor-repository.js
+export class SensorRepository {
+  #db;
+  constructor(db) { this.#db = db; }
+
+  /**
+   * Bulk insert readings (use COPY or multi-row INSERT for performance)
+   */
+  async bulkInsert(readings) {
+    const values = readings.map((_, i) =>
+      `($${i * 5 + 1}, $${i * 5 + 2}, $${i * 5 + 3}, $${i * 5 + 4}, $${i * 5 + 5})`
+    ).join(', ');
+    const params = readings.flatMap(r => [r.time, r.deviceId, r.metric, r.value, r.unit]);
+    await this.#db.query(
+      `INSERT INTO sensor_readings (time, device_id, metric, value, unit) VALUES ${values}`,
+      params
+    );
+  }
+
+  /**
+   * Time-bucket aggregation using TimescaleDB time_bucket()
+   */
+  async getAggregated({ deviceId, metric, interval = '1 hour', from, to }) {
+    const { rows } = await this.#db.query(`
+      SELECT
+        time_bucket($1::interval, time) AS bucket,
+        AVG(value)                       AS avg_value,
+        MIN(value)                       AS min_value,
+        MAX(value)                       AS max_value,
+        COUNT(*)                         AS sample_count
+      FROM sensor_readings
+      WHERE device_id = $2
+        AND metric    = $3
+        AND time BETWEEN $4 AND $5
+      GROUP BY bucket
+      ORDER BY bucket ASC
+    `, [interval, deviceId, metric, from, to]);
+    return rows;
+  }
+
+  /**
+   * Last known value per device using last() aggregate
+   */
+  async getLatestPerDevice(metric) {
+    const { rows } = await this.#db.query(`
+      SELECT device_id, last(value, time) AS latest_value, max(time) AS recorded_at
+      FROM sensor_readings
+      WHERE metric = $1
+      GROUP BY device_id
+    `, [metric]);
+    return rows;
+  }
+}
+```
+
+## Continuous Aggregates (Materialized Views)
+- Define continuous aggregates for dashboards; never run heavy aggregations on raw data at request time.
+
+```sql
+CREATE MATERIALIZED VIEW hourly_sensor_stats
+WITH (timescaledb.continuous) AS
+SELECT
+  time_bucket('1 hour', time) AS bucket,
+  device_id,
+  metric,
+  AVG(value)  AS avg_value,
+  MAX(value)  AS max_value,
+  MIN(value)  AS min_value
+FROM sensor_readings
+GROUP BY bucket, device_id, metric
+WITH NO DATA;
+
+SELECT add_continuous_aggregate_policy('hourly_sensor_stats',
+  start_offset  => INTERVAL '3 hours',
+  end_offset    => INTERVAL '1 hour',
+  schedule_interval => INTERVAL '1 hour'
+);
+```
+
+## Retention Policies
+- Set data retention policies in migrations, not in code.
+```sql
+SELECT add_retention_policy('sensor_readings', INTERVAL '90 days');
+```
+
+## Best Practices
+- **Always filter by the time column first** in WHERE clauses to exploit chunk pruning.
+- Use `time_bucket()` for grouping, never `DATE_TRUNC` on hypertables.
+- Batch inserts (100–10 000 rows per transaction) for high-throughput ingestion.
+- Use `timescaledb.enable_chunk_skipping` for sparse data.
+- Monitor chunk compression ratio; enable compression for chunks older than 7 days.
+```sql
+ALTER TABLE sensor_readings SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'device_id,metric'
+);
+SELECT add_compression_policy('sensor_readings', INTERVAL '7 days');
+```

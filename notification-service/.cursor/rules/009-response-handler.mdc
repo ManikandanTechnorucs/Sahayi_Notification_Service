@@ -1,0 +1,22 @@
+---
+alwaysApply: true
+---
+## Controller Layer — Response Rules (MANDATORY)
+ 
+Every controller response MUST use `libs/response/src/response.ts`:
+ 
+```js
+// List OK          → res.status(200).json(response.createJson(response.SUCCESS_CODE, data, data.length))
+// Empty list       → res.status(200).json(response.NO_DATA_FOUND)
+// Single OK        → res.status(200).json(response.createJson(response.SUCCESS_CODE, data))
+// Not found        → res.status(404).json(response.NO_DATA_FOUND_V2)
+// Created          → res.status(201).json({ ...response.DATA_SAVED, data })
+// Updated          → res.status(200).json({ ...response.DATA_UPDATED, data })
+// Deleted          → res.status(200).json(response.DATA_DELETED_SUCCESSFULLY)
+// Conflict         → res.status(409).json(response.USER_EXIST)   // or domain-specific
+// Server error     → res.status(500).json(response.OOPS_ERROR)
+// Unauthorized     → res.status(401).json(response.UNAUTHORIZED)
+// Forbidden        → res.status(403).json(response.PERMISSION_DENIED)
+```
+ 
+**Never return raw JSON objects from controllers.**

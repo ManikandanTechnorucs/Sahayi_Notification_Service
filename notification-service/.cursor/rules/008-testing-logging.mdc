@@ -1,0 +1,155 @@
+# Testing, Logging & Observability Rules
+
+## Testing Stack
+- **Unit**: Jest + `@jest/globals`
+- **Integration**: Jest + `supertest` (Express endpoints)
+- **DB Integration**: Use test containers (`testcontainers`) or in-memory mocks
+- **Coverage target**: ≥ 80% lines; 100% on all service-layer business logic
+
+## Test File Conventions
+- Co-locate unit tests: `src/services/__tests__/user-service.test.js`
+- Integration tests: `tests/integration/user-api.test.js`
+- Test factories: `tests/factories/user-factory.js`
+
+## Unit Test Rules
+- Mock all external dependencies (DB, ASB, HTTP calls) — never hit real services in unit tests.
+- Follow **AAA pattern**: Arrange → Act → Assert.
+- One assertion concept per `it()` block.
+- Use `jest.spyOn` over manual mocks when possible.
+
+```js
+// tests/unit/user-service.test.js
+import { describe, it, expect, jest, beforeEach } from '@jest/globals';
+import { UserService } from '../../src/services/user-service.js';
+
+describe('UserService', () => {
+  let userService, userRepo, notifier;
+
+  beforeEach(() => {
+    userRepo = { findById: jest.fn(), create: jest.fn() };
+    notifier = { send: jest.fn() };
+    userService = new UserService(userRepo, notifier);
+  });
+
+  describe('createUser()', () => {
+    it('should create a user and send a welcome notification', async () => {
+      // Arrange
+      const input    = { name: 'Alice', email: 'alice@example.com' };
+      const created  = { id: 1, ...input };
+      userRepo.create.mockResolvedValue(created);
+
+      // Act
+      const result = await userService.createUser(input);
+
+      // Assert
+      expect(userRepo.create).toHaveBeenCalledWith(input);
+      expect(notifier.send).toHaveBeenCalledWith(expect.objectContaining({ to: input.email }));
+      expect(result).toEqual(created);
+    });
+
+    it('should throw ValidationError for duplicate email', async () => {
+      userRepo.create.mockRejectedValue({ code: 'ER_DUP_ENTRY' });
+      await expect(userService.createUser({ email: 'dup@x.com' }))
+        .rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    });
+  });
+});
+```
+
+## Integration Test Rules
+- Use `supertest` against the Express `app` (not a running server).
+- Seed and tear down test data in `beforeAll`/`afterAll`.
+- Run integration tests against a **separate test database** (`.env.test`).
+
+```js
+// tests/integration/user-api.test.js
+import request from 'supertest';
+import app from '../../src/app.js';
+
+describe('POST /api/v1/users', () => {
+  it('returns 201 with created user', async () => {
+    const res = await request(app)
+      .post('/api/v1/users')
+      .set('X-Request-Id', 'test-req-001')
+      .send({ name: 'Bob', email: 'bob@example.com' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toMatchObject({ name: 'Bob', email: 'bob@example.com' });
+  });
+});
+```
+
+---
+
+## Logging Rules
+- Use **Pino** (structured JSON logging); never use `console.log` in production code.
+- Log levels: `trace` | `debug` | `info` | `warn` | `error` | `fatal`.
+- Every log entry must include: `requestId`, `service`, `level`, `timestamp`, `message`.
+- Never log PII (email, phone, password, tokens) — mask before logging.
+
+```js
+// src/config/logger.js
+import pino from 'pino';
+import { env } from './env.js';
+
+export const logger = pino({
+  level: env.LOG_LEVEL ?? (env.NODE_ENV === 'production' ? 'info' : 'debug'),
+  base: { service: 'my-service', env: env.NODE_ENV },
+  timestamp: pino.stdTimeFunctions.isoTime,
+  redact: ['body.password', 'body.token', 'headers.authorization'],
+  ...(env.NODE_ENV !== 'production' && {
+    transport: { target: 'pino-pretty', options: { colorize: true } },
+  }),
+});
+```
+
+## Request Logging Middleware
+
+```js
+// src/middlewares/request-logger.js
+import { logger } from '../config/logger.js';
+import { randomUUID } from 'crypto';
+
+export function requestLogger(req, res, next) {
+  req.requestId = req.headers['x-request-id'] ?? randomUUID();
+  req.log = logger.child({ requestId: req.requestId });
+
+  const start = Date.now();
+  res.on('finish', () => {
+    req.log.info({
+      method:     req.method,
+      url:        req.originalUrl,
+      statusCode: res.statusCode,
+      durationMs: Date.now() - start,
+    }, 'request completed');
+  });
+  next();
+}
+```
+
+---
+
+## Observability — Application Insights
+- Use `applicationinsights` SDK in production for Azure Monitor integration.
+- Track custom events for business-critical flows (order placed, payment failed).
+- Track dependencies for every DB call and Service Bus operation.
+- Set `samplingPercentage` to 20–50% for high-traffic services (reduce cost).
+
+```js
+// src/config/app-insights.js
+import appInsights from 'applicationinsights';
+import { env } from './env.js';
+
+if (env.NODE_ENV === 'production' && env.APPINSIGHTS_INSTRUMENTATIONKEY) {
+  appInsights
+    .setup(env.APPINSIGHTS_INSTRUMENTATIONKEY)
+    .setAutoCollectRequests(true)
+    .setAutoCollectDependencies(true)
+    .setAutoCollectExceptions(true)
+    .setAutoCollectPerformance(true)
+    .setSendLiveMetrics(true)
+    .start();
+}
+export const insights = appInsights.defaultClient;
+```

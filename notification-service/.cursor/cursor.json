@@ -1,0 +1,18 @@
+{
+  "rules": [
+    ".cursor/rules/000-project-overview.mdc",
+    ".cursor/rules/001-solid-oop.mdc",
+    ".cursor/rules/002-nodejs-express.mdc",
+    ".cursor/rules/003-mysql.mdc",
+    ".cursor/rules/004-mongodb.mdc",
+    ".cursor/rules/005-timescaledb.mdc",
+    ".cursor/rules/006-azure-service-bus.mdc",
+    ".cursor/rules/007-azure-apim-appgateway.mdc",
+    ".cursor/rules/008-testing-logging.mdc"
+  ],
+  "alwaysApply": [
+    ".cursor/rules/000-project-overview.mdc",
+    ".cursor/rules/001-solid-oop.mdc",
+    ".cursor/rules/002-nodejs-express.mdc"
+  ]
+}

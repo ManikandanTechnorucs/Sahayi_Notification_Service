@@ -1,0 +1,174 @@
+# Azure Service Bus Rules
+
+## SDK
+- Use `@azure/service-bus` (v7+) — the official Microsoft SDK.
+- Never use raw AMQP libraries directly.
+
+## Connection Rules
+- Use **connection string** from env var `ASB_CONNECTION_STRING`.
+- Prefer **Managed Identity** (`DefaultAzureCredential`) in production over connection strings.
+- Create `ServiceBusClient` once at startup (singleton); close on shutdown.
+
+```js
+// src/config/service-bus.js
+import { ServiceBusClient } from '@azure/service-bus';
+import { DefaultAzureCredential } from '@azure/identity';
+import { env } from './env.js';
+
+let client;
+
+export function getServiceBusClient() {
+  if (client) return client;
+
+  if (env.NODE_ENV === 'production') {
+    // Managed Identity — no secrets in code
+    client = new ServiceBusClient(env.ASB_NAMESPACE, new DefaultAzureCredential());
+  } else {
+    client = new ServiceBusClient(env.ASB_CONNECTION_STRING);
+  }
+  return client;
+}
+
+export async function closeServiceBusClient() {
+  if (client) {
+    await client.close();
+    client = null;
+  }
+}
+```
+
+## Producer (Sender) Pattern
+
+```js
+// src/events/producers/order-producer.js
+import { getServiceBusClient } from '../../config/service-bus.js';
+
+const QUEUE_NAME = 'orders';
+
+export class OrderProducer {
+  #sender = null;
+
+  async #getSender() {
+    if (!this.#sender) {
+      this.#sender = getServiceBusClient().createSender(QUEUE_NAME);
+    }
+    return this.#sender;
+  }
+
+  /**
+   * @param {Object} orderPayload
+   * @param {string} [sessionId]  - for session-enabled queues
+   */
+  async publishOrderCreated(orderPayload, sessionId) {
+    const sender = await this.#getSender();
+    const message = {
+      body:              orderPayload,
+      contentType:       'application/json',
+      subject:           'order.created',
+      sessionId,                           // omit if not session-enabled
+      applicationProperties: {
+        version:    '1.0',
+        source:     'order-service',
+        occurredAt: new Date().toISOString(),
+      },
+    };
+    await sender.sendMessages(message);
+  }
+
+  /**
+   * Send a batch for high-throughput scenarios
+   */
+  async publishBatch(orders) {
+    const sender = await this.#getSender();
+    let batch = await sender.createMessageBatch();
+    for (const order of orders) {
+      const msg = { body: order, contentType: 'application/json', subject: 'order.created' };
+      if (!batch.tryAddMessage(msg)) {
+        await sender.sendMessages(batch);
+        batch = await sender.createMessageBatch();
+        batch.tryAddMessage(msg);
+      }
+    }
+    await sender.sendMessages(batch);
+  }
+
+  async close() {
+    if (this.#sender) await this.#sender.close();
+  }
+}
+```
+
+## Consumer (Receiver) Pattern
+
+```js
+// src/events/consumers/order-consumer.js
+import { getServiceBusClient } from '../../config/service-bus.js';
+
+const QUEUE_NAME    = 'orders';
+const MAX_MESSAGES  = 10;
+const LOCK_DURATION = 60; // seconds — must match queue lock duration setting
+
+export class OrderConsumer {
+  #receiver = null;
+  #running  = false;
+
+  constructor(orderService) {
+    this.orderService = orderService;
+  }
+
+  start() {
+    this.#receiver = getServiceBusClient().createReceiver(QUEUE_NAME, {
+      receiveMode: 'peekLock',   // always use peekLock, not receiveAndDelete
+    });
+    this.#running = true;
+    this.#receiver.subscribe({
+      processMessage: this.#handleMessage.bind(this),
+      processError:   this.#handleError.bind(this),
+    }, {
+      maxConcurrentCalls:    MAX_MESSAGES,
+      autoCompleteMessages:  false,   // manual completion for reliability
+    });
+    console.info(`[OrderConsumer] Listening on queue: ${QUEUE_NAME}`);
+  }
+
+  async #handleMessage(message) {
+    try {
+      const payload = message.body;
+      await this.orderService.processOrder(payload);
+      await this.#receiver.completeMessage(message);   // ✅ ack
+    } catch (err) {
+      console.error('[OrderConsumer] Processing failed:', err);
+      // Abandon → back to queue (up to maxDeliveryCount, then → DLQ)
+      await this.#receiver.abandonMessage(message);
+    }
+  }
+
+  async #handleError({ error }) {
+    console.error('[OrderConsumer] Receiver error:', error);
+  }
+
+  async stop() {
+    this.#running = false;
+    if (this.#receiver) await this.#receiver.close();
+  }
+}
+```
+
+## Dead-Letter Queue (DLQ) Rules
+- Always process the DLQ in a separate consumer.
+- Log every DLQ message with full context before discarding.
+- Alert on DLQ depth > threshold via Azure Monitor.
+
+## Topic / Subscription Rules
+- Use **topics** (pub/sub) when multiple consumers need the same message.
+- Use **queues** for point-to-point / command patterns.
+- Set `maxDeliveryCount` to 3–5; dead-letter beyond that.
+- Use **sessions** for ordered processing per entity (e.g., per `orderId`).
+
+## Best Practices
+- Always `completeMessage()` or `abandonMessage()` — never let lock expire.
+- Renew message lock for long-running handlers: `renewMessageLock()` at 75% of lock duration.
+- Design consumers to be **idempotent** (use a deduplication ID / `messageId`).
+- Include `messageId`, `correlationId`, `sessionId` in every message for tracing.
+- Use `applicationProperties` for routing metadata; keep `body` as the domain payload.
+- Close senders/receivers/client on `SIGTERM`.

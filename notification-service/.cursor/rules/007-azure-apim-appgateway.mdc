@@ -1,0 +1,114 @@
+# Azure API Management (APIM) & Application Gateway Rules
+
+## APIM — API Design Rules
+- Register every Express service API in APIM; never expose Express directly to the internet.
+- Use **OpenAPI 3.0 spec** as the source of truth; import into APIM from spec file.
+- Version APIs in the URL path: `/api/v1/`, `/api/v2/`.
+- Group related operations under a single APIM **API**; use **Products** for access tiers.
+
+## APIM Policy Rules
+- Apply policies at the **global** → **product** → **API** → **operation** hierarchy (most broad to most specific).
+- Mandatory global policies:
+
+```xml
+<!-- inbound -->
+<cors allow-credentials="true">
+  <allowed-origins><origin>https://yourdomain.com</origin></allowed-origins>
+  <allowed-methods><method>GET</method><method>POST</method><method>PUT</method><method>DELETE</method></allowed-methods>
+  <allowed-headers><header>Authorization</header><header>Content-Type</header></allowed-headers>
+</cors>
+<rate-limit-by-key calls="1000" renewal-period="60"
+  counter-key="@(context.Request.Headers.GetValueOrDefault("X-Forwarded-For",""))" />
+<set-header name="X-Request-Id" exists-action="skip">
+  <value>@(Guid.NewGuid().ToString())</value>
+</set-header>
+
+<!-- backend -->
+<set-backend-service base-url="{{BackendBaseUrl}}" />
+<forward-request timeout="30" />
+
+<!-- outbound -->
+<set-header name="X-Content-Type-Options" exists-action="override"><value>nosniff</value></set-header>
+<set-header name="X-Frame-Options" exists-action="override"><value>DENY</value></set-header>
+```
+
+## Authentication & Authorization in APIM
+- Validate **JWT tokens** in APIM inbound policy; don't validate again in Express (trust APIM).
+- Use `validate-jwt` policy with Azure AD / Entra ID JWKS endpoint.
+
+```xml
+<validate-jwt header-name="Authorization" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized">
+  <openid-config url="https://login.microsoftonline.com/{tenant-id}/v2.0/.well-known/openid-configuration" />
+  <required-claims>
+    <claim name="aud"><value>api://{client-id}</value></claim>
+  </required-claims>
+</validate-jwt>
+```
+
+## Backend Health & Circuit Breaker
+- Configure APIM **backends** with health probes.
+- Use the `retry` policy for transient failures (max 3 retries, exponential backoff).
+
+```xml
+<retry condition="@(context.Response.StatusCode >= 500)" count="3" interval="2" delta="1" max-interval="10">
+  <forward-request />
+</retry>
+```
+
+## Subscription Keys
+- Require subscription keys for all APIs except health-check endpoints.
+- Scope keys to **Products** (not individual APIs).
+- Rotate keys via APIM Named Values; never hardcode in backend.
+
+## Named Values (Secrets)
+- Store all backend URLs, secrets, and feature flags as **Named Values** in APIM.
+- Use `{{BackendBaseUrl}}`, `{{JwtSecret}}` syntax in policies.
+- Link Named Values to **Azure Key Vault** for secrets.
+
+---
+
+## Application Gateway Rules
+- Place Application Gateway **in front of APIM** for WAF protection.
+- Enable **WAF v2** in Prevention mode with OWASP 3.2 rule set.
+- Configure APIM as the **backend pool** target (private IP or internal APIM URL).
+- Enable **end-to-end TLS** (HTTPS from client → AppGW → APIM → Express).
+- Terminate SSL at AppGW with managed certificate (Azure-issued).
+
+## AppGW Health Probes
+- Configure custom health probes per backend (path: `/health`, interval: 30s, threshold: 2).
+- APIM's built-in health endpoint: `GET /status-0123456789abcdef`.
+
+## Express Backend — Rules When Behind APIM/AppGW
+- Trust the proxy: add `app.set('trust proxy', 1)` in Express.
+- Use `X-Forwarded-For` for real client IP (set by AppGW).
+- Validate `X-Request-Id` header forwarded by APIM; include in all log entries.
+- Health endpoint must be **unauthenticated** and respond within 200ms.
+
+```js
+// src/routes/health-routes.js
+import { Router } from 'express';
+const router = Router();
+
+router.get('/health', async (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+router.get('/health/ready', async (req, res) => {
+  // Check DB connections
+  try {
+    await mysqlPool.query('SELECT 1');
+    await mongoose.connection.db.command({ ping: 1 });
+    res.json({ status: 'ready' });
+  } catch (err) {
+    res.status(503).json({ status: 'unavailable', error: err.message });
+  }
+});
+
+export default router;
+```
+
+## Observability
+- Pass `X-Request-Id` (set by APIM) through to all downstream service calls and DB queries.
+- Emit `X-Correlation-Id` in responses for client-side tracing.
+- Stream APIM diagnostic logs to **Azure Monitor / Application Insights**.
+- Tag all APIM APIs with `environment`, `team`, `service` tags for cost attribution.

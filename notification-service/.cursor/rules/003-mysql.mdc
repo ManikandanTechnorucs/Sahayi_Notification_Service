@@ -1,0 +1,97 @@
+# MySQL Rules
+
+## Driver & Pool
+- Use `mysql2/promise` (not `mysql` or the callback-based `mysql2`).
+- Always use a **connection pool**; never create single-use connections in request handlers.
+- Pool config must respect `DB_POOL_MIN`, `DB_POOL_MAX` env vars.
+
+```js
+// src/config/mysql.js
+import mysql from 'mysql2/promise';
+import { env } from './env.js';
+
+export const mysqlPool = mysql.createPool({
+  host:               env.DB_HOST,
+  port:               env.DB_PORT,
+  database:           env.DB_NAME,
+  user:               env.DB_USER,
+  password:           env.DB_PASS,
+  waitForConnections: true,
+  connectionLimit:    env.DB_POOL_MAX ?? 10,
+  queueLimit:         0,
+  timezone:           'Z',      // store UTC
+  decimalNumbers:     true,
+});
+```
+
+## Query Rules
+- **Always use parameterized queries** — never template-literal SQL with user input.
+- Use `?` placeholders for positional params or named `:param` with `mysql2`'s named mode.
+- Wrap related mutations in explicit transactions.
+- Return raw rows from repositories; let services shape the response.
+
+```js
+// src/repositories/user-repository.js
+export class UserRepository {
+  #db;
+  constructor(db) { this.#db = db; }
+
+  async findById(id) {
+    const [rows] = await this.#db.query('SELECT * FROM users WHERE id = ? LIMIT 1', [id]);
+    return rows[0] ?? null;
+  }
+
+  async create(data) {
+    const [result] = await this.#db.execute(
+      'INSERT INTO users (name, email, created_at) VALUES (?, ?, NOW())',
+      [data.name, data.email]
+    );
+    return this.findById(result.insertId);
+  }
+
+  async transferFunds(fromId, toId, amount) {
+    const conn = await this.#db.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.execute('UPDATE accounts SET balance = balance - ? WHERE id = ?', [amount, fromId]);
+      await conn.execute('UPDATE accounts SET balance = balance + ? WHERE id = ?', [amount, toId]);
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  }
+}
+```
+
+## Schema & Migration Rules
+- Use **Flyway** or `db-migrate` for version-controlled migrations; never alter schema manually in production.
+- Migration files: `V{version}__{description}.sql` (e.g., `V001__create_users_table.sql`).
+- All tables must have: `id` (BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY), `created_at`, `updated_at`.
+- Use `DATETIME(3)` for timestamps (millisecond precision).
+- Foreign keys must have explicit `ON DELETE` and `ON UPDATE` clauses.
+- Every FK column must be indexed.
+
+```sql
+-- V001__create_users_table.sql
+CREATE TABLE users (
+  id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name       VARCHAR(255)        NOT NULL,
+  email      VARCHAR(255)        NOT NULL UNIQUE,
+  status     ENUM('active','inactive','banned') NOT NULL DEFAULT 'active',
+  created_at DATETIME(3)         NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3)         NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  INDEX idx_users_email (email),
+  INDEX idx_users_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+## Best Practices
+- Use `utf8mb4` charset and `utf8mb4_unicode_ci` collation on all tables/columns.
+- Avoid `SELECT *`; always specify columns.
+- Use `LIMIT` on all unbounded queries.
+- Log slow queries (threshold: 500ms); never suppress them.
+- Never store passwords in plain text; use `bcrypt` hash before insert.
+- Store monetary values as `DECIMAL(19,4)`, not `FLOAT`.
