@@ -1,0 +1,23 @@
+---
+description: Generate complete Swagger documentation for every API
+globs: ["src/swagger"]
+alwaysApply: true
+---
+
+# API Swagger Rule
+
+- Every API must include complete Swagger decorators.
+- Use `@ApiTags()` for every controller.
+- Use `@ApiBearerAuth()` only for protected endpoints.
+- Add `@ApiOperation()` with meaningful summary and description.
+- Use DTOs for all request and response models.
+- Every DTO field must have `@ApiProperty()` or `@ApiPropertyOptional()`.
+- Add validation decorators (`class-validator`) to all DTO fields.
+- Document all path parameters using `@ApiParam()`.
+- Document all query parameters using `@ApiQuery()`.
+- Document request bodies using `@ApiBody()`.
+- Add appropriate success responses (`@ApiOkResponse()`, `@ApiCreatedResponse()`, etc.).
+- Add error responses (`400`, `401`, `403`, `404`, `409`, `500`) with examples.
+- Include realistic request and response examples.
+- Ensure Swagger documentation always matches the implementation.
+- Do not expose internal models, secrets, or database entities in Swagger.

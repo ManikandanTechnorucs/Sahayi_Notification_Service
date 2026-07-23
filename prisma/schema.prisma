@@ -1,0 +1,623 @@
+// =============================================================================
+// SAHAYII - Prisma Schema
+// =============================================================================
+//
+// Reference commands:
+//   npx prisma validate          Validate schema syntax and relations
+//   npx prisma reset             reset the database
+//   npx prisma generate          Regenerate Prisma Client after schema changes
+//   npx prisma migrate dev       Create and apply a migration (development)
+//   npx prisma migrate deploy    Apply pending migrations (production)
+//   npx prisma db pull           Introspect database and sync schema from DB
+//   npx prisma studio            Open visual database browser
+//   npx prisma format            Format this schema file
+//
+// Schema layout:
+//   1. Generator & datasource
+//   2. Enums
+//   3. Master / lookup tables
+//   4. Core user entity
+//   5. User profile & contacts
+//   6. Relationship requests
+//   7. Reminders
+//   8. Health history
+//   9. Notifications & devices
+// =============================================================================
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../generated/prisma"
+  importFileExtension = "ts"
+  moduleFormat        = "cjs"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+// -----------------------------------------------------------------------------
+// ENUMS
+// -----------------------------------------------------------------------------
+
+enum users_Platform {
+  ANDROID
+  IOS
+}
+
+// -----------------------------------------------------------------------------
+// MASTER / LOOKUP TABLES
+// -----------------------------------------------------------------------------
+
+// User profile masters: referenced by users.RoleId, users.SubscriptionId, users.AITextId, users.AIVoiceId
+model rolesmaster {
+  Id        Int       @id @default(autoincrement())
+  Name      String    @unique(map: "UX_RolesMaster_Name") @db.VarChar(100)
+  Label     String    @unique(map: "UX_RolesMaster_Label") @db.VarChar(100)
+  IsActive  Boolean   @default(true)
+  CreatedAt DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt DateTime? @db.DateTime(0)
+
+  users users[]
+}
+
+model subscriptionmaster {
+  Id        Int       @id @default(autoincrement())
+  Name      String    @unique(map: "UX_SubscriptionMaster_Name") @db.VarChar(100)
+  Label     String    @unique(map: "UX_SubscriptionMaster_Label") @db.VarChar(100)
+
+  MonthlyCost   String    @db.VarChar(10)
+  yearlyCost    String    @db.VarChar(10)
+
+  FamilyMembersLimit      Int
+  EmergencyContactsLimit  Int
+  CaregiverConnection     Int
+  CaretakerConnection     Int
+  RemindersLimit          String     @db.VarChar(10)
+  EmergencySOSalert       Boolean
+  WearableIntegration     Boolean
+  AdvancedReminderTracking    Boolean
+  AdvancedHealthMonitor   Boolean
+
+  AdvancedAINotification  Boolean
+  AITextLimit     String?     @db.VarChar(50)
+  AIVoiceLimit     String?     @db.VarChar(50)
+
+  IsActive  Boolean   @default(true)
+  CreatedAt DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt DateTime? @db.DateTime(0)
+
+  users users[]
+}
+
+model aitextmaster {
+  Id        Int       @id @default(autoincrement())
+  Name      String    @unique(map: "UX_AITextMaster_Name") @db.VarChar(100)
+  Label     String    @unique(map: "UX_AITextMaster_Label") @db.VarChar(100)
+  IsActive  Boolean   @default(true)
+  CreatedAt DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt DateTime? @db.DateTime(0)
+
+  users users[]
+}
+
+model aivoicemaster {
+  Id        Int       @id @default(autoincrement())
+  Name      String    @unique(map: "UX_AIVoiceMaster_Name") @db.VarChar(100)
+  Label     String    @unique(map: "UX_AIVoiceMaster_Label") @db.VarChar(100)
+  IsActive  Boolean   @default(true)
+  CreatedAt DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt DateTime? @db.DateTime(0)
+
+  users users[]
+}
+
+// Reminder masters: referenced by masterreminder and childreminder
+model categoriesmaster {
+  Id            BigInt    @id @default(autoincrement())
+  CategoryName  String    @unique(map: "CategoryName") @db.VarChar(100)
+  CategoryLabel String    @db.VarChar(100)
+  Description   String?   @db.VarChar(255)
+  IsActive      Boolean   @default(true)
+  CreatedAt     DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt     DateTime? @db.DateTime(0)
+
+  masterreminder masterreminder[]
+}
+
+model frequencymaster {
+  Id             Int     @id @default(autoincrement())
+  FrequencyName  String  @unique(map: "FrequencyName") @db.VarChar(100)
+  FrequencyLabel String  @db.VarChar(100)
+  Description    String? @db.VarChar(255)
+
+  IsActive  Boolean   @default(true)
+  CreatedAt DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt DateTime? @db.DateTime(0)
+
+  masterreminder masterreminder[]
+}
+
+model statusmaster {
+  Id          Int     @id @default(autoincrement())
+  StatusName  String  @unique(map: "StatusName") @db.VarChar(100)
+  StatusLabel String  @db.VarChar(100)
+  Description String? @db.VarChar(255)
+
+  IsActive  Boolean   @default(true)
+  CreatedAt DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt DateTime? @db.DateTime(0)
+
+  childreminder childreminder[]
+}
+
+// Relationship request masters: referenced by userrelationshiprequest.RequestTypeId, RequestStatusId
+model requesttypemaster {
+  Id Int @id @default(autoincrement())
+
+  Name String @unique @db.VarChar(100)
+
+  IsActive Boolean @default(true)
+
+  CreatedAt DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt DateTime? @db.DateTime(0)
+
+  userrelationshiprequest userrelationshiprequest[]
+}
+
+model requeststatusmaster {
+  Id Int @id @default(autoincrement())
+
+  Name String @unique @db.VarChar(50)
+
+  IsActive Boolean @default(true)
+
+  CreatedAt DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt DateTime? @db.DateTime(0)
+
+  userrelationshiprequest userrelationshiprequest[]
+}
+
+// -----------------------------------------------------------------------------
+// CORE USER ENTITY
+// -----------------------------------------------------------------------------
+
+model users {
+  Id BigInt @id @default(autoincrement())
+
+  RoleId         Int
+  SubscriptionId Int?
+  AITextId   Int?
+  AIVoiceId   Int?
+
+  Name         String  @db.VarChar(150)
+  MobileNumber String  @unique(map: "UX_Users_MobileNumber") @db.VarChar(20)
+  Email        String? @db.VarChar(200)
+
+  ProfileImage   String? @db.VarChar(1000)
+
+  WakeupTime      String? @db.VarChar(50)
+  SleepTime       String? @db.VarChar(50)
+  MealsPerDay     String? @db.VarChar(50)
+  ExerciseRoutine String? @db.VarChar(200)
+
+  Otp          Int       @default(0)
+  OtpExpiresAt DateTime? @db.DateTime(0)
+
+  FcmToken String?         @db.VarChar(500)
+  Platform users_Platform?
+
+  IsActive Boolean @default(true)
+
+  CreatedAt DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt DateTime? @db.DateTime(0)
+
+  // Profile master references
+  rolesmaster        rolesmaster         @relation(fields: [RoleId], references: [Id], onDelete: NoAction, onUpdate: NoAction)
+  subscriptionmaster subscriptionmaster? @relation(fields: [SubscriptionId], references: [Id], onDelete: NoAction, onUpdate: NoAction)
+  aitextmaster   aitextmaster?   @relation(fields: [AITextId], references: [Id], onDelete: NoAction, onUpdate: NoAction)
+  aivoicemaster   aivoicemaster?   @relation(fields: [AIVoiceId], references: [Id], onDelete: NoAction, onUpdate: NoAction)
+
+  // User-owned records
+  masterreminder       masterreminder[]
+  familyMembers        FamilyMembers[]
+  emergencyContacts    EmergencyContacts[]
+  bloodpressurehistory bloodpressurehistory[]
+  heartratehistory     heartratehistory[]
+  sleephistory         sleephistory[]
+  spo2history          spo2history[]
+  stephistory          stephistory[]
+  notificationlog      notificationlog[]
+  userdevicetoken      userdevicetoken[]
+  ScheduledNotification ScheduledNotification[]
+  DeliveredNotifications DeliveredNotification[]
+
+  // Relationship requests (sent / received)
+  SentRelationshipRequests     userrelationshiprequest[] @relation("RequestFromUser")
+  ReceivedRelationshipRequests userrelationshiprequest[] @relation("RequestToUser")
+
+  @@index([RoleId], map: "IX_Users_RoleId")
+  @@index([SubscriptionId], map: "IX_Users_SubscriptionId")
+  @@index([AITextId], map: "IX_Users_AITextId")
+  @@index([AIVoiceId], map: "IX_Users_AIVoiceId")
+}
+
+
+// -----------------------------------------------------------------------------
+// USER PROFILE & CONTACTS
+// -----------------------------------------------------------------------------
+
+model FamilyMembers {
+  Id           BigInt @id @default(autoincrement())
+  Name         String
+  Relationship String
+  PhoneNumber  String
+
+  IsViewReminders Boolean @default(false)
+  IsAlerts        Boolean @default(false)
+  IsHealthReports Boolean @default(false)
+
+  userId BigInt
+  users  users  @relation(fields: [userId], references: [Id], onDelete: Cascade)
+
+  CreatedAt DateTime @default(now())
+  UpdatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model EmergencyContacts {
+  Id           BigInt @id @default(autoincrement())
+  Name         String
+  Relationship String
+  PhoneNumber  String
+
+  userId BigInt
+  users  users  @relation(fields: [userId], references: [Id], onDelete: Cascade)
+
+  CreatedAt DateTime @default(now())
+  UpdatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// -----------------------------------------------------------------------------
+// RELATIONSHIP REQUESTS
+// -----------------------------------------------------------------------------
+
+model userrelationshiprequest {
+  Id BigInt @id @default(autoincrement())
+
+  RequestFromUserId BigInt
+  RequestToUserId   BigInt
+
+  RequestTypeId   Int
+  RequestStatusId Int
+
+  Relationship    String? @db.VarChar(50)
+
+  IsViewReminders    Boolean @default(false)
+  IsReceiveAlert     Boolean @default(false)
+  IsHealthReport     Boolean @default(false)
+
+  RequestedAt DateTime @default(now()) @db.DateTime(0)
+
+  ApprovedAt DateTime? @db.DateTime(0)
+  RejectedAt DateTime? @db.DateTime(0)
+
+  Remarks String? @db.VarChar(500)
+
+  IsActive Boolean @default(true)
+
+  CreatedAt DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt DateTime? @db.DateTime(0)
+
+  RequestFromUser     users               @relation("RequestFromUser", fields: [RequestFromUserId], references: [Id], onDelete: NoAction, onUpdate: NoAction)
+  RequestToUser       users               @relation("RequestToUser", fields: [RequestToUserId], references: [Id], onDelete: NoAction, onUpdate: NoAction)
+  requesttypemaster   requesttypemaster   @relation(fields: [RequestTypeId], references: [Id], onDelete: NoAction, onUpdate: NoAction)
+  requeststatusmaster requeststatusmaster @relation(fields: [RequestStatusId], references: [Id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([RequestFromUserId, RequestToUserId, RequestTypeId], map: "UX_UserRelationshipRequest")
+  @@index([RequestFromUserId])
+  @@index([RequestToUserId])
+  @@index([RequestTypeId])
+  @@index([RequestStatusId])
+}
+
+// -----------------------------------------------------------------------------
+// REMINDERS
+// -----------------------------------------------------------------------------
+
+model masterreminder {
+  Id           BigInt    @id @default(autoincrement())
+  UserId       BigInt
+  CategoryId   BigInt
+  FrequencyId  Int
+  Title        String    @db.VarChar(200)
+  Note         String?   @db.VarChar(500)
+  StartDate    DateTime  @db.Date
+  EndDate      DateTime? @db.Date
+  ReminderTime DateTime  @db.Time(0)
+  IsActive     Boolean   @default(true)
+  CreatedAt    DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt    DateTime? @db.DateTime(0)
+
+  users            users            @relation(fields: [UserId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_MasterReminder_User")
+  categoriesmaster categoriesmaster @relation(fields: [CategoryId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_MasterReminder_Category")
+  frequencymaster  frequencymaster  @relation(fields: [FrequencyId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_MasterReminder_Frequency")
+  childreminder    childreminder[]
+
+  @@index([UserId], map: "IX_MasterReminder_UserId")
+  @@index([CategoryId], map: "IX_MasterReminder_CategoryId")
+  @@index([FrequencyId], map: "IX_MasterReminder_FrequencyId")
+}
+
+model childreminder {
+  Id               BigInt   @id @default(autoincrement())
+  MasterReminderId BigInt
+  ReminderDate     DateTime @db.Date
+  ReminderTime     DateTime @db.Time(0)
+  StatusId         Int
+
+  BeforeNotificationSent Boolean @default(false)
+  OnTimeNotificationSent Boolean @default(false)
+  AfterNotificationSent  Boolean @default(false)
+
+  CompletedAt DateTime? @db.DateTime(0)
+  IsActive    Boolean   @default(true)
+  CreatedAt   DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt   DateTime? @db.DateTime(0)
+
+  masterreminder       masterreminder                      @relation(fields: [MasterReminderId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_ChildReminder_Master")
+  statusmaster         statusmaster                        @relation(fields: [StatusId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_ChildReminder_Status")
+  notificationschedule childremindernotificationschedule[]
+
+  @@unique([MasterReminderId, ReminderDate], map: "UX_ChildReminder_Master_Date")
+  @@index([MasterReminderId], map: "IX_ChildReminder_MasterReminderId")
+  @@index([ReminderDate], map: "IX_ChildReminder_ReminderDate")
+  @@index([StatusId], map: "IX_ChildReminder_StatusId")
+}
+
+model childremindernotificationschedule {
+  Id              BigInt   @id @default(autoincrement())
+  ChildReminderId BigInt
+  Phase           String   @db.VarChar(20)
+  SequenceNumber  BigInt
+  ScheduledAt     DateTime @db.DateTime(0)
+  IsCancelled     Boolean  @default(false)
+  CreatedAt       DateTime @default(now()) @db.DateTime(0)
+
+  childreminder childreminder @relation(fields: [ChildReminderId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_ChildReminderNotification_Child")
+
+  @@unique([ChildReminderId, Phase], map: "UX_ChildReminderNotification_Phase")
+  @@index([ChildReminderId], map: "IX_ChildReminderNotification_ChildId")
+}
+
+// -----------------------------------------------------------------------------
+// HEALTH HISTORY
+// -----------------------------------------------------------------------------
+
+model bloodpressurehistory {
+  Id     BigInt @id @default(autoincrement())
+  UserId BigInt
+
+  Systolic  Int
+  Diastolic Int
+
+  RecordedAt DateTime @db.DateTime(0)
+
+  IsActive  Boolean  @default(true)
+  CreatedAt DateTime @default(now()) @db.DateTime(0)
+
+  users users @relation(fields: [UserId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_BloodPressureHistory_User")
+
+  @@index([UserId, RecordedAt], map: "IX_BloodPressureHistory_User_RecordedAt")
+}
+
+model heartratehistory {
+  Id     BigInt @id @default(autoincrement())
+  UserId BigInt
+
+  HeartRate Int
+
+  RecordedAt DateTime @db.DateTime(0)
+
+  IsActive  Boolean  @default(true)
+  CreatedAt DateTime @default(now()) @db.DateTime(0)
+
+  users users @relation(fields: [UserId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_HeartRateHistory_User")
+
+  @@index([UserId, RecordedAt], map: "IX_HeartRateHistory_User_RecordedAt")
+}
+
+model sleephistory {
+  Id     BigInt @id @default(autoincrement())
+  UserId BigInt
+
+  SleepStartTime DateTime @db.DateTime(0)
+  SleepEndTime   DateTime @db.DateTime(0)
+
+  TotalMinutes Int
+
+  RecordedAt DateTime @db.DateTime(0)
+
+  IsActive  Boolean  @default(true)
+  CreatedAt DateTime @default(now()) @db.DateTime(0)
+
+  users users @relation(fields: [UserId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_SleepHistory_User")
+
+  @@index([UserId, RecordedAt], map: "IX_SleepHistory_User_RecordedAt")
+}
+
+model spo2history {
+  Id     BigInt @id @default(autoincrement())
+  UserId BigInt
+
+  OxygenLevel Decimal @db.Decimal(5, 2)
+
+  RecordedAt DateTime @db.DateTime(0)
+
+  IsActive  Boolean  @default(true)
+  CreatedAt DateTime @default(now()) @db.DateTime(0)
+
+  users users @relation(fields: [UserId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_SpO2History_User")
+
+  @@index([UserId, RecordedAt], map: "IX_SpO2History_User_RecordedAt")
+}
+
+model stephistory {
+  Id     BigInt @id @default(autoincrement())
+  UserId BigInt
+
+  StepsCount Int
+
+  RecordedAt DateTime @db.DateTime(0)
+
+  IsActive  Boolean  @default(true)
+  CreatedAt DateTime @default(now()) @db.DateTime(0)
+
+  users users @relation(fields: [UserId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_StepHistory_User")
+
+  @@index([UserId, RecordedAt], map: "IX_StepHistory_User_RecordedAt")
+}
+
+// -----------------------------------------------------------------------------
+// NOTIFICATIONS & DEVICES
+// -----------------------------------------------------------------------------
+
+model notificationlog {
+  Id BigInt @id @default(autoincrement())
+
+  MessageId     String @unique(map: "UX_NotificationLog_MessageId") @db.VarChar(64)
+  CorrelationId String @db.VarChar(64)
+
+  UserId BigInt
+
+  Module    String @db.VarChar(50)
+  EventType String @db.VarChar(100)
+
+  SourceEntityId String? @db.VarChar(64)
+
+  Title String @db.VarChar(200)
+  Body  String @db.VarChar(1000)
+
+  Channels Json
+
+  Status String @db.VarChar(20)
+
+  ChannelResults  Json?
+  PayloadSnapshot Json?
+
+  LastError String? @db.VarChar(500)
+
+  CompletedAt DateTime? @db.DateTime(0)
+
+  CreatedAt DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt DateTime? @db.DateTime(0)
+
+  users users @relation(fields: [UserId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_NotificationLog_User")
+
+  @@index([UserId], map: "IX_NotificationLog_UserId")
+}
+
+model userdevicetoken {
+  Id BigInt @id @default(autoincrement())
+
+  UserId BigInt
+
+  FcmToken String @unique(map: "UX_UserDeviceToken_FcmToken") @db.VarChar(512)
+
+  Platform String @default("unknown") @db.VarChar(20)
+
+  DeviceId String? @db.VarChar(256)
+
+  IsActive Boolean @default(true)
+
+  LastUsedAt DateTime? @db.DateTime(0)
+
+  DeactivatedAt DateTime? @db.DateTime(0)
+
+  DeactivationReason String? @db.VarChar(100)
+
+  CreatedAt DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt DateTime? @db.DateTime(0)
+
+  users users @relation(fields: [UserId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_UserDeviceToken_User")
+
+  @@index([UserId, IsActive], map: "IX_UserDeviceToken_User_Active")
+}
+
+model daily_questions {
+  id               BigInt    @id @default(autoincrement())
+  user_id          BigInt
+  question         String?   @db.Text
+  option1          String?   @db.VarChar(255)
+  option1_response String?   @db.Text
+  option2          String?   @db.VarChar(255)
+  option2_response String?   @db.Text
+  option3          String?   @db.VarChar(255)
+  option3_response String?   @db.Text
+  category         String?   @db.VarChar(100)
+  question_date    DateTime? @db.Date
+  is_answered      Boolean?   @default(false)
+  selected_answer  String?   @db.VarChar(255)
+  created_at       DateTime? @default(now()) @db.Timestamp(0)
+}
+
+
+enum ScheduledNotificationStatus {
+  SCHEDULED
+  PROCESSING
+  SENT
+  DELIVERED
+  FAILED
+  CANCELLED
+}
+
+model ScheduledNotification {
+  Id              BigInt                 @id @default(autoincrement())
+  UserId          BigInt
+  DeviceToken     String?                @db.VarChar(500)
+  Title           String                 @db.VarChar(200)
+  Message         String                 @db.VarChar(1000)
+  Status          ScheduledNotificationStatus
+  AzureMessageId  String?                @db.VarChar(200)
+  ScheduledAt     DateTime               @db.DateTime(0)
+  SentAt          DateTime?              @db.DateTime(0)
+  DeliveredAt     DateTime?              @db.DateTime(0)
+  FailedAt        DateTime?              @db.DateTime(0)
+  RetryCount      Int                    @default(0)
+  ErrorMessage    String?                @db.VarChar(1000)
+  CreatedAt       DateTime               @default(now()) @db.DateTime(0)
+  UpdatedAt       DateTime?              @db.DateTime(0)
+
+  DeliveredNotifications DeliveredNotification[]
+  users users @relation(fields: [UserId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_ScheduledNotification_User")
+
+  @@index([UserId], map: "IX_ScheduledNotification_UserId")
+  @@index([Status], map: "IX_ScheduledNotification_Status")
+  @@index([ScheduledAt], map: "IX_ScheduledNotification_ScheduledAt")
+}
+
+model DeliveredNotification {
+  Id                      BigInt   @id @default(autoincrement())
+  ScheduledNotificationId BigInt
+  UserId                  BigInt
+
+  Title   String @db.VarChar(200)
+  Message String @db.VarChar(1000)
+
+  DeliveredAt DateTime  @db.DateTime(0)
+  ReadAt      DateTime? @db.DateTime(0)
+
+  IsRead Boolean @default(false)
+
+  CreatedAt DateTime @default(now()) @db.DateTime(0)
+
+  scheduledNotification ScheduledNotification @relation(fields: [ScheduledNotificationId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_DeliveredNotification_ScheduledNotification")
+  users                 users                 @relation(fields: [UserId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_DeliveredNotification_User")
+
+  @@index([UserId], map: "IX_DeliveredNotification_UserId")
+  @@index([ScheduledNotificationId], map: "IX_DeliveredNotification_ScheduledNotificationId")
+  @@index([DeliveredAt], map: "IX_DeliveredNotification_DeliveredAt")
+  @@index([IsRead], map: "IX_DeliveredNotification_IsRead")
+}

@@ -1,3 +1,71 @@
-firebase-service-account.json
+node_modules
+# Keep environment variables out of version control
+/generated/prisma
+/prisma/migrations
+/dist
+/build
+/logs
+/cache
+/temp
+/archive
+/backup
+# System
+.DS_Store
+Thumbs.db
+
+# IDE & Editor folders
+.vscode/
+.idea/
+*.swp
+
+# Logs and reports
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+/coverage
+/.nyc_output
+/.jest
+
+# Dependency folders
+/node_modules
+/apps/*/node_modules
+/packages/*/node_modules
+
+# Build output
+/dist
+/build
+
+# Prisma generated and local files
+/generated
+/prisma/migrations/
+prisma/.env
+
+# Environment files
 .env
-local.settings.json
+.env.local
+.env.*.local
+
+# Documentation
+/docs
+
+# Cursor and development tools
+.canvas/
+.snapshots/
+
+# Misc
+*.tgz
+*.gz
+*.zip
+*.bak
+*.tmp
+*.env.backup
+
+# TypeScript
+*.tsbuildinfo
+
+# Database
+*.sqlite
+*.db
+# Do not track gitignore itself, but kept for clarity
+!.gitignore
