@@ -1,3 +1,4 @@
+import Long from 'long';
 import { ScheduledNotificationStatus } from '../../generated/prisma/client';
 import { config } from '../../libs/config/src/config';
 import { logger } from '../../libs/logger/src/logger';
@@ -8,11 +9,25 @@ import {
 import type { MessagingInfrastructure } from '../../libs/messaging/src/index';
 import { NotFoundError, ValidationError } from '../errors/app-error';
 import type { ScheduledNotificationRepository } from '../repositories/scheduled-notification.repository';
-import type { CreateScheduledNotificationBody } from '../validators/scheduled-notification.validator';
 import type {
+  DeliveredNotificationListResult,
   DeliveredNotificationResponseDto,
   ScheduledNotificationResponseDto,
 } from '../dto/scheduled-notification.dto';
+import type {
+  CreateScheduledNotificationBody,
+  GetDeliveredNotificationsQuery,
+} from '../validators/scheduled-notification.validator';
+import { resolveScheduledEnqueueTime } from '../utils/reminder-schedule-time.util';
+
+export type InternalCreateScheduledNotificationInput = {
+  userId: bigint;
+  title: string;
+  message: string;
+  scheduledAt: Date;
+  childReminderId?: bigint;
+  notificationType?: string;
+};
 
 /**
  * Business logic for scheduling push notifications via Azure Service Bus.
@@ -30,9 +45,13 @@ export class ScheduledNotificationService {
   }
 
   /**
-   * Fetches delivered notifications for the authenticated user.
+   * Fetches delivered notifications for the authenticated user with pagination.
+   * Sorted by DeliveredAt DESC and includes related scheduled notification details.
    */
-  async getDelivered(userId: string): Promise<DeliveredNotificationResponseDto[]> {
+  async getDelivered(
+    userId: string,
+    query: GetDeliveredNotificationsQuery,
+  ): Promise<DeliveredNotificationListResult> {
     let parsedUserId: bigint;
 
     try {
@@ -41,9 +60,60 @@ export class ScheduledNotificationService {
       throw new ValidationError('Authenticated user id is invalid');
     }
 
-    const notifications = await this.#repository.findDeliveredByUserId(parsedUserId);
+    const page = query.page ?? config.DELIVERED_NOTIFICATION_DEFAULT_PAGE;
+    const limit = Math.min(
+      query.limit ?? config.DELIVERED_NOTIFICATION_DEFAULT_LIMIT,
+      config.DELIVERED_NOTIFICATION_MAX_LIMIT,
+    );
 
-    return notifications.map((notification) => ({
+    const { items, total } = await this.#repository.findDeliveredByUserId(
+      parsedUserId,
+      page,
+      limit,
+    );
+
+    const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+
+    return {
+      items: items.map((notification) => this.#toDeliveredResponseDto(notification)),
+      page,
+      limit,
+      total,
+      totalPages,
+    };
+  }
+
+  #toDeliveredResponseDto(notification: {
+    Id: bigint;
+    ScheduledNotificationId: bigint;
+    UserId: bigint;
+    Title: string;
+    Message: string;
+    DeliveredAt: Date;
+    ReadAt: Date | null;
+    IsRead: boolean;
+    CreatedAt: Date;
+    scheduledNotification: {
+      Id: bigint;
+      UserId: bigint;
+      ChildReminderId: bigint | null;
+      NotificationType: string | null;
+      Title: string;
+      Message: string;
+      Status: string;
+      ScheduledAt: Date;
+      SentAt: Date | null;
+      DeliveredAt: Date | null;
+      FailedAt: Date | null;
+      RetryCount: number;
+      ErrorMessage: string | null;
+      CreatedAt: Date;
+      UpdatedAt: Date | null;
+    } | null;
+  }): DeliveredNotificationResponseDto {
+    const schedule = notification.scheduledNotification;
+
+    return {
       id: notification.Id.toString(),
       scheduledNotificationId: notification.ScheduledNotificationId.toString(),
       userId: notification.UserId.toString(),
@@ -53,7 +123,26 @@ export class ScheduledNotificationService {
       readAt: notification.ReadAt?.toISOString() ?? null,
       isRead: notification.IsRead,
       createdAt: notification.CreatedAt.toISOString(),
-    }));
+      scheduledNotification: schedule
+        ? {
+            id: schedule.Id.toString(),
+            userId: schedule.UserId.toString(),
+            childReminderId: schedule.ChildReminderId?.toString() ?? null,
+            notificationType: schedule.NotificationType,
+            title: schedule.Title,
+            message: schedule.Message,
+            status: schedule.Status,
+            scheduledAt: schedule.ScheduledAt.toISOString(),
+            sentAt: schedule.SentAt?.toISOString() ?? null,
+            deliveredAt: schedule.DeliveredAt?.toISOString() ?? null,
+            failedAt: schedule.FailedAt?.toISOString() ?? null,
+            retryCount: schedule.RetryCount,
+            errorMessage: schedule.ErrorMessage,
+            createdAt: schedule.CreatedAt.toISOString(),
+            updatedAt: schedule.UpdatedAt?.toISOString() ?? null,
+          }
+        : null,
+    };
   }
 
   /**
@@ -62,9 +151,8 @@ export class ScheduledNotificationService {
    */
   async create(input: CreateScheduledNotificationBody): Promise<ScheduledNotificationResponseDto> {
     const userId = BigInt(input.userId);
-    const queueName = config.NOTIFICATION_QUEUE_NAME;
 
-    if (!queueName) {
+    if (!config.NOTIFICATION_QUEUE_NAME) {
       throw new ValidationError('NOTIFICATION_QUEUE_NAME is not configured');
     }
 
@@ -74,21 +162,51 @@ export class ScheduledNotificationService {
       throw new NotFoundError('User');
     }
 
-    const deviceToken = await this.#repository.findUserDeviceToken(userId);
+    const childReminderId =
+      input.childReminderId !== undefined ? BigInt(input.childReminderId) : undefined;
 
-    const created = await this.#repository.create({
+    const row = await this.createInternal({
       userId,
       title: input.title,
       message: input.message,
       scheduledAt: input.scheduledAt,
+      ...(childReminderId !== undefined ? { childReminderId } : {}),
+      ...(input.notificationType !== undefined ? { notificationType: input.notificationType } : {}),
+    });
+
+    return row;
+  }
+
+  /**
+   * Internal schedule path for sync jobs — skips HTTP-level user validation.
+   */
+  async createInternal(
+    input: InternalCreateScheduledNotificationInput,
+  ): Promise<ScheduledNotificationResponseDto> {
+    const queueName = config.NOTIFICATION_QUEUE_NAME;
+
+    if (!queueName) {
+      throw new ValidationError('NOTIFICATION_QUEUE_NAME is not configured');
+    }
+
+    const enqueueAt = resolveScheduledEnqueueTime(input.scheduledAt);
+    const deviceToken = await this.#repository.findUserDeviceToken(input.userId);
+
+    const created = await this.#repository.create({
+      userId: input.userId,
+      title: input.title,
+      message: input.message,
+      scheduledAt: enqueueAt,
       status: ScheduledNotificationStatus.SCHEDULED,
       deviceToken,
+      childReminderId: input.childReminderId ?? null,
+      notificationType: input.notificationType ?? null,
     });
 
     const payload: NotificationDispatchPayload = {
       module: 'notification',
       eventType: NotificationEventTypes.SCHEDULED,
-      userId: userId.toString(),
+      userId: input.userId.toString(),
       title: input.title,
       body: input.message,
       channels: config.NOTIFICATION_DEFAULT_CHANNELS,
@@ -96,9 +214,13 @@ export class ScheduledNotificationService {
       data: {
         scheduledNotificationId: created.Id.toString(),
         status: ScheduledNotificationStatus.SCHEDULED,
+        ...(input.notificationType ? { notificationType: input.notificationType } : {}),
+        ...(input.childReminderId !== undefined
+          ? { childReminderId: input.childReminderId.toString() }
+          : {}),
       },
       metadata: {
-        scheduledFor: input.scheduledAt.toISOString(),
+        scheduledFor: enqueueAt.toISOString(),
       },
     };
 
@@ -109,11 +231,15 @@ export class ScheduledNotificationService {
         queueName,
         eventType: NotificationEventTypes.DISPATCH,
         payload,
-        scheduledEnqueueTime: input.scheduledAt,
+        scheduledEnqueueTime: enqueueAt,
         options: {
           correlationId: created.Id.toString(),
           metadata: {
             scheduledNotificationId: created.Id.toString(),
+            ...(input.notificationType ? { notificationType: input.notificationType } : {}),
+            ...(input.childReminderId !== undefined
+              ? { childReminderId: input.childReminderId.toString() }
+              : {}),
           },
           subject: NotificationEventTypes.SCHEDULED,
         },
@@ -134,9 +260,11 @@ export class ScheduledNotificationService {
     logger.info(
       {
         scheduledNotificationId: created.Id.toString(),
-        userId: userId.toString(),
+        userId: input.userId.toString(),
+        childReminderId: input.childReminderId?.toString(),
+        notificationType: input.notificationType,
         azureMessageId,
-        scheduledAt: input.scheduledAt.toISOString(),
+        scheduledAt: enqueueAt.toISOString(),
         queueName,
       },
       'scheduled notification created and queued',
@@ -145,9 +273,109 @@ export class ScheduledNotificationService {
     return this.#toResponseDto(updated);
   }
 
+  /**
+   * Cancels a single scheduled notification and its Azure sequence when present.
+   */
+  async cancel(id: string): Promise<ScheduledNotificationResponseDto> {
+    let parsedId: bigint;
+
+    try {
+      parsedId = BigInt(id);
+    } catch {
+      throw new ValidationError('Scheduled notification id is invalid');
+    }
+
+    const existing = await this.#repository.findById(parsedId);
+
+    if (!existing) {
+      throw new NotFoundError('Scheduled notification');
+    }
+
+    if (
+      existing.Status === ScheduledNotificationStatus.CANCELLED ||
+      existing.Status === ScheduledNotificationStatus.DELIVERED ||
+      existing.Status === ScheduledNotificationStatus.SENT
+    ) {
+      return this.#toResponseDto(existing);
+    }
+
+    await this.#cancelAzureSchedule(existing.AzureMessageId);
+
+    const cancelled = await this.#repository.cancelById(parsedId);
+
+    logger.info(
+      {
+        scheduledNotificationId: parsedId.toString(),
+        childReminderId: existing.ChildReminderId?.toString(),
+        notificationType: existing.NotificationType,
+      },
+      'scheduled notification cancelled',
+    );
+
+    return this.#toResponseDto(cancelled);
+  }
+
+  /**
+   * Cancels all active schedules for a child reminder.
+   */
+  async cancelByChildReminder(childReminderId: string): Promise<{ cancelledCount: number }> {
+    let parsedChildReminderId: bigint;
+
+    try {
+      parsedChildReminderId = BigInt(childReminderId);
+    } catch {
+      throw new ValidationError('Child reminder id is invalid');
+    }
+
+    const activeSchedules =
+      await this.#repository.findActiveByChildReminderId(parsedChildReminderId);
+
+    for (const schedule of activeSchedules) {
+      await this.#cancelAzureSchedule(schedule.AzureMessageId);
+    }
+
+    const cancelledCount = await this.#repository.cancelByChildReminderId(parsedChildReminderId);
+
+    logger.info(
+      {
+        childReminderId: parsedChildReminderId.toString(),
+        cancelledCount,
+      },
+      'child reminder schedules cancelled',
+    );
+
+    return { cancelledCount };
+  }
+
+  async #cancelAzureSchedule(azureMessageId: string | null): Promise<void> {
+    const queueName = config.NOTIFICATION_QUEUE_NAME;
+
+    if (!queueName || !azureMessageId) {
+      return;
+    }
+
+    try {
+      await this.#messaging.scheduler.cancelScheduled(
+        queueName,
+        Long.fromString(azureMessageId),
+      );
+    } catch (error) {
+      logger.warn(
+        {
+          err: error,
+          azureMessageId,
+          queueName,
+        },
+        'failed to cancel Azure scheduled message; marking row cancelled anyway',
+      );
+    }
+  }
+
   #toResponseDto(row: {
     Id: bigint;
     UserId: bigint;
+    ChildReminderId: bigint | null;
+    NotificationType: string | null;
     DeviceToken: string | null;
     Title: string;
     Message: string;
@@ -165,6 +393,8 @@ export class ScheduledNotificationService {
     return {
       id: row.Id.toString(),
       userId: row.UserId.toString(),
+      childReminderId: row.ChildReminderId?.toString() ?? null,
+      notificationType: row.NotificationType,
       deviceToken: row.DeviceToken,
       title: row.Title,
       message: row.Message,

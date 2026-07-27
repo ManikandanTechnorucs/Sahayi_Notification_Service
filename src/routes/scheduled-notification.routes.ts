@@ -2,7 +2,12 @@ import { Router } from 'express';
 import { validate } from '../../libs/validation/src/validate';
 import { requireAuth } from '../middlewares/auth.middleware';
 import type { ScheduledNotificationController } from '../controllers/scheduled-notification.controller';
-import { createScheduledNotificationSchema } from '../validators/scheduled-notification.validator';
+import {
+  cancelByChildReminderParamsSchema,
+  cancelScheduledNotificationParamsSchema,
+  createScheduledNotificationSchema,
+  getDeliveredNotificationsQuerySchema,
+} from '../validators/scheduled-notification.validator';
 
 /**
  * Routes for scheduled notification APIs.
@@ -19,7 +24,28 @@ export function createScheduledNotificationRoutes(
     controller.create,
   );
 
-  router.get('/delivered-notification', requireAuth, controller.getDelivered);
+  router.post('/sync-today-reminders', requireAuth, controller.syncTodayReminders);
+
+  router.delete(
+    '/schedule-notification/by-child-reminder/:childReminderId',
+    requireAuth,
+    validate(cancelByChildReminderParamsSchema),
+    controller.cancelByChildReminder,
+  );
+
+  router.delete(
+    '/schedule-notification/:id',
+    requireAuth,
+    validate(cancelScheduledNotificationParamsSchema),
+    controller.cancel,
+  );
+
+  router.get(
+    '/delivered-notification',
+    requireAuth,
+    validate(getDeliveredNotificationsQuerySchema),
+    controller.getDelivered,
+  );
 
   return router;
 }

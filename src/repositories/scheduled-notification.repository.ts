@@ -4,6 +4,7 @@ import type {
   ScheduledNotification,
   ScheduledNotificationStatus,
 } from '../../generated/prisma/client';
+import { REMINDER_NOTIFICATION_TYPE_VALUES } from '../constants/reminder-notification.constants';
 
 export type CreateScheduledNotificationRecord = {
   userId: bigint;
@@ -12,19 +13,122 @@ export type CreateScheduledNotificationRecord = {
   scheduledAt: Date;
   status: ScheduledNotificationStatus;
   deviceToken?: string | null;
+  childReminderId?: bigint | null;
+  notificationType?: string | null;
 };
+
+export type DeliveredNotificationWithSchedule = DeliveredNotification & {
+  scheduledNotification: ScheduledNotification | null;
+};
+
+export type PaginatedDeliveredNotifications = {
+  items: DeliveredNotificationWithSchedule[];
+  total: number;
+};
+
+const ACTIVE_STATUSES: ScheduledNotificationStatus[] = ['SCHEDULED', 'PROCESSING', 'FAILED'];
 
 /**
  * Data-access for ScheduledNotification rows.
  */
 export class ScheduledNotificationRepository {
   /**
-   * Fetches delivered notifications belonging to the authenticated user.
+   * Fetches delivered notifications for a user with pagination and related schedule.
+   * Ordered by DeliveredAt DESC (latest first).
    */
-  async findDeliveredByUserId(userId: bigint): Promise<DeliveredNotification[]> {
-    return prisma.deliveredNotification.findMany({
-      where: { UserId: userId },
-      orderBy: { DeliveredAt: 'desc' },
+  async findDeliveredByUserId(
+    userId: bigint,
+    page: number,
+    limit: number,
+  ): Promise<PaginatedDeliveredNotifications> {
+    const where = { UserId: userId };
+    const skip = (page - 1) * limit;
+
+    const [total, items] = await Promise.all([
+      prisma.deliveredNotification.count({ where }),
+      prisma.deliveredNotification.findMany({
+        where,
+        include: {
+          scheduledNotification: true,
+        },
+        orderBy: { DeliveredAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return { items, total };
+  }
+
+  /**
+   * Loads a scheduled notification by primary key.
+   */
+  async findById(id: bigint): Promise<ScheduledNotification | null> {
+    return prisma.scheduledNotification.findUnique({
+      where: { Id: id },
+    });
+  }
+
+  /**
+   * Loads active schedules for a single child reminder.
+   */
+  async findActiveByChildReminderId(childReminderId: bigint): Promise<ScheduledNotification[]> {
+    return prisma.scheduledNotification.findMany({
+      where: {
+        ChildReminderId: childReminderId,
+        Status: { in: ACTIVE_STATUSES },
+      },
+      orderBy: { CreatedAt: 'desc' },
+    });
+  }
+
+  /**
+   * Loads active schedules for multiple child reminders.
+   */
+  async findActiveByChildReminderIds(childReminderIds: bigint[]): Promise<ScheduledNotification[]> {
+    if (childReminderIds.length === 0) {
+      return [];
+    }
+
+    return prisma.scheduledNotification.findMany({
+      where: {
+        ChildReminderId: { in: childReminderIds },
+        Status: { in: ACTIVE_STATUSES },
+      },
+      orderBy: { CreatedAt: 'desc' },
+    });
+  }
+
+  /**
+   * Loads active reminder schedules tied to today's children or scheduled for today.
+   */
+  async findActiveReminderSchedulesForDate(
+    dateStart: Date,
+    dateEnd: Date,
+    childReminderIds: bigint[],
+  ): Promise<ScheduledNotification[]> {
+    const childFilter =
+      childReminderIds.length > 0
+        ? [{ ChildReminderId: { in: childReminderIds } }]
+        : [];
+
+    return prisma.scheduledNotification.findMany({
+      where: {
+        Status: { in: ACTIVE_STATUSES },
+        OR: [
+          ...childFilter,
+          {
+            ScheduledAt: {
+              gte: dateStart,
+              lte: dateEnd,
+            },
+            NotificationType: {
+              in: [...REMINDER_NOTIFICATION_TYPE_VALUES],
+            },
+          },
+        ],
+      },
+      orderBy: { CreatedAt: 'desc' },
     });
   }
 
@@ -35,6 +139,8 @@ export class ScheduledNotificationRepository {
     return prisma.scheduledNotification.create({
       data: {
         UserId: data.userId,
+        ChildReminderId: data.childReminderId ?? null,
+        NotificationType: data.notificationType ?? null,
         Title: data.title,
         Message: data.message,
         ScheduledAt: data.scheduledAt,
@@ -56,6 +162,37 @@ export class ScheduledNotificationRepository {
         UpdatedAt: new Date(),
       },
     });
+  }
+
+  /**
+   * Marks a scheduled notification as CANCELLED.
+   */
+  async cancelById(id: bigint): Promise<ScheduledNotification> {
+    return prisma.scheduledNotification.update({
+      where: { Id: id },
+      data: {
+        Status: 'CANCELLED',
+        UpdatedAt: new Date(),
+      },
+    });
+  }
+
+  /**
+   * Marks all active schedules for a child reminder as CANCELLED.
+   */
+  async cancelByChildReminderId(childReminderId: bigint): Promise<number> {
+    const result = await prisma.scheduledNotification.updateMany({
+      where: {
+        ChildReminderId: childReminderId,
+        Status: { in: ACTIVE_STATUSES },
+      },
+      data: {
+        Status: 'CANCELLED',
+        UpdatedAt: new Date(),
+      },
+    });
+
+    return result.count;
   }
 
   /**

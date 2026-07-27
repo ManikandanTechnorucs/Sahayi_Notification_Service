@@ -94,6 +94,30 @@ export const openApiDocument = {
           updatedAt: { type: 'string', format: 'date-time', nullable: true },
         },
       },
+      DeliveredScheduledNotificationSummaryDto: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: '42' },
+          userId: { type: 'string', example: '7' },
+          childReminderId: { type: 'string', nullable: true, example: '93' },
+          notificationType: { type: 'string', nullable: true, example: 'before' },
+          title: { type: 'string', example: 'Medication reminder' },
+          message: { type: 'string', example: 'Time to take your evening medication' },
+          status: {
+            type: 'string',
+            enum: ['SCHEDULED', 'PROCESSING', 'SENT', 'DELIVERED', 'FAILED', 'CANCELLED'],
+            example: 'DELIVERED',
+          },
+          scheduledAt: { type: 'string', format: 'date-time' },
+          sentAt: { type: 'string', format: 'date-time', nullable: true },
+          deliveredAt: { type: 'string', format: 'date-time', nullable: true },
+          failedAt: { type: 'string', format: 'date-time', nullable: true },
+          retryCount: { type: 'integer', example: 0 },
+          errorMessage: { type: 'string', nullable: true },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time', nullable: true },
+        },
+      },
       DeliveredNotificationResponseDto: {
         type: 'object',
         required: [
@@ -105,6 +129,7 @@ export const openApiDocument = {
           'deliveredAt',
           'isRead',
           'createdAt',
+          'scheduledNotification',
         ],
         properties: {
           id: { type: 'string', example: '18' },
@@ -123,6 +148,10 @@ export const openApiDocument = {
             type: 'string',
             format: 'date-time',
             example: '2026-07-18T10:30:02.000Z',
+          },
+          scheduledNotification: {
+            nullable: true,
+            allOf: [{ $ref: '#/components/schemas/DeliveredScheduledNotificationSummaryDto' }],
           },
         },
       },
@@ -145,7 +174,14 @@ export const openApiDocument = {
             type: 'array',
             items: { $ref: '#/components/schemas/DeliveredNotificationResponseDto' },
           },
-          count: { type: 'integer', example: 1 },
+          count: {
+            type: 'integer',
+            example: 48,
+            description: 'Total delivered notifications matching the query',
+          },
+          page: { type: 'integer', example: 1 },
+          limit: { type: 'integer', example: 30 },
+          totalPages: { type: 'integer', example: 2 },
         },
       },
       NoDataFoundResponse: {
@@ -277,9 +313,25 @@ export const openApiDocument = {
         tags: ['Scheduled Notifications'],
         summary: 'Fetch my delivered notifications',
         description:
-          'Returns delivered notifications for the user identified by the authenticated JWT.',
+          'Returns paginated delivered notifications for the authenticated user, sorted by DeliveredAt DESC (latest first), including related scheduled notification details.',
         operationId: 'getMyDeliveredNotifications',
         security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'page',
+            in: 'query',
+            required: false,
+            description: 'Page number (1-based). Default: 1',
+            schema: { type: 'integer', minimum: 1, default: 1, example: 1 },
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            description: 'Page size. Default: 30. Maximum: 30',
+            schema: { type: 'integer', minimum: 1, maximum: 30, default: 30, example: 30 },
+          },
+        ],
         responses: {
           '200': {
             description: 'Delivered notifications, or a no-data response when none exist',
@@ -309,9 +361,29 @@ export const openApiDocument = {
                           readAt: null,
                           isRead: false,
                           createdAt: '2026-07-18T10:30:02.000Z',
+                          scheduledNotification: {
+                            id: '42',
+                            userId: '7',
+                            childReminderId: '93',
+                            notificationType: 'before',
+                            title: 'Medication reminder',
+                            message: 'Time to take your evening medication',
+                            status: 'DELIVERED',
+                            scheduledAt: '2026-07-18T10:30:00.000Z',
+                            sentAt: '2026-07-18T10:30:01.000Z',
+                            deliveredAt: '2026-07-18T10:30:02.000Z',
+                            failedAt: null,
+                            retryCount: 0,
+                            errorMessage: null,
+                            createdAt: '2026-07-18T09:00:00.000Z',
+                            updatedAt: '2026-07-18T10:30:02.000Z',
+                          },
                         },
                       ],
-                      count: 1,
+                      count: 48,
+                      page: 1,
+                      limit: 30,
+                      totalPages: 2,
                     },
                   },
                   noData: {
@@ -323,6 +395,14 @@ export const openApiDocument = {
                     },
                   },
                 },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation error',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
               },
             },
           },
