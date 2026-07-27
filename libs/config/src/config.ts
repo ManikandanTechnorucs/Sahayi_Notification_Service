@@ -81,7 +81,22 @@ export const config = {
   REMINDER_MAX_OCCURRENCES: parsePositiveIntEnv('REMINDER_MAX_OCCURRENCES', 365),
   REMINDER_BEFORE_OFFSET_MINUTES: parsePositiveIntEnv('REMINDER_BEFORE_OFFSET_MINUTES', 5),
   REMINDER_AFTER_OFFSET_MINUTES: parsePositiveIntEnv('REMINDER_AFTER_OFFSET_MINUTES', 5),
+  REMINDER_SYNC_INTERVAL_MS: parsePositiveIntEnv('REMINDER_SYNC_INTERVAL_MS', 300_000),
+  /** IANA timezone for reminder wall-clock times (app users are India-based). */
+  REMINDER_TIMEZONE: getOptionalEnv('REMINDER_TIMEZONE') ?? 'Asia/Kolkata',
   NOTIFICATION_SERVICE_PORT: Number(process.env.NOTIFICATION_SERVICE_PORT ?? 3004),
+  DELIVERED_NOTIFICATION_DEFAULT_PAGE: parsePositiveIntEnv(
+    'DELIVERED_NOTIFICATION_DEFAULT_PAGE',
+    1,
+  ),
+  DELIVERED_NOTIFICATION_DEFAULT_LIMIT: parsePositiveIntEnv(
+    'DELIVERED_NOTIFICATION_DEFAULT_LIMIT',
+    30,
+  ),
+  DELIVERED_NOTIFICATION_MAX_LIMIT: parsePositiveIntEnv(
+    'DELIVERED_NOTIFICATION_MAX_LIMIT',
+    30,
+  ),
   /** Shared Azure Service Bus queue for all notification dispatch events */
   NOTIFICATION_QUEUE_NAME:
     getOptionalEnv('NOTIFICATION_QUEUE_NAME') ?? 'notifications',

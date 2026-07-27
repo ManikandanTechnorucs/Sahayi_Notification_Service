@@ -367,11 +367,12 @@ model childreminder {
   CreatedAt   DateTime  @default(now()) @db.DateTime(0)
   UpdatedAt   DateTime? @db.DateTime(0)
 
-  masterreminder       masterreminder                      @relation(fields: [MasterReminderId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_ChildReminder_Master")
-  statusmaster         statusmaster                        @relation(fields: [StatusId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_ChildReminder_Status")
-  notificationschedule childremindernotificationschedule[]
+  masterreminder         masterreminder                      @relation(fields: [MasterReminderId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_ChildReminder_Master")
+  statusmaster           statusmaster                        @relation(fields: [StatusId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_ChildReminder_Status")
+  notificationschedule   childremindernotificationschedule[]
+  scheduledNotifications ScheduledNotification[]
 
-  @@unique([MasterReminderId, ReminderDate], map: "UX_ChildReminder_Master_Date")
+  @@index([MasterReminderId, ReminderDate, IsActive], map: "IX_ChildReminder_Master_Date_Active")
   @@index([MasterReminderId], map: "IX_ChildReminder_MasterReminderId")
   @@index([ReminderDate], map: "IX_ChildReminder_ReminderDate")
   @@index([StatusId], map: "IX_ChildReminder_StatusId")
@@ -574,28 +575,33 @@ enum ScheduledNotificationStatus {
 }
 
 model ScheduledNotification {
-  Id              BigInt                 @id @default(autoincrement())
-  UserId          BigInt
-  DeviceToken     String?                @db.VarChar(500)
-  Title           String                 @db.VarChar(200)
-  Message         String                 @db.VarChar(1000)
-  Status          ScheduledNotificationStatus
-  AzureMessageId  String?                @db.VarChar(200)
-  ScheduledAt     DateTime               @db.DateTime(0)
-  SentAt          DateTime?              @db.DateTime(0)
-  DeliveredAt     DateTime?              @db.DateTime(0)
-  FailedAt        DateTime?              @db.DateTime(0)
-  RetryCount      Int                    @default(0)
-  ErrorMessage    String?                @db.VarChar(1000)
-  CreatedAt       DateTime               @default(now()) @db.DateTime(0)
-  UpdatedAt       DateTime?              @db.DateTime(0)
+  Id               BigInt                        @id @default(autoincrement())
+  UserId           BigInt
+  ChildReminderId  BigInt?
+  NotificationType String?                       @db.VarChar(50)
+  DeviceToken      String?                       @db.VarChar(500)
+  Title            String                        @db.VarChar(200)
+  Message          String                        @db.VarChar(1000)
+  Status           ScheduledNotificationStatus
+  AzureMessageId   String?                       @db.VarChar(200)
+  ScheduledAt      DateTime                      @db.DateTime(0)
+  SentAt           DateTime?                     @db.DateTime(0)
+  DeliveredAt      DateTime?                     @db.DateTime(0)
+  FailedAt         DateTime?                     @db.DateTime(0)
+  RetryCount       Int                           @default(0)
+  ErrorMessage     String?                       @db.VarChar(1000)
+  CreatedAt        DateTime                      @default(now()) @db.DateTime(0)
+  UpdatedAt        DateTime?                     @db.DateTime(0)
 
   DeliveredNotifications DeliveredNotification[]
-  users users @relation(fields: [UserId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_ScheduledNotification_User")
+  users                  users                   @relation(fields: [UserId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_ScheduledNotification_User")
+  childreminder          childreminder?          @relation(fields: [ChildReminderId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_ScheduledNotification_ChildReminder")
 
   @@index([UserId], map: "IX_ScheduledNotification_UserId")
   @@index([Status], map: "IX_ScheduledNotification_Status")
   @@index([ScheduledAt], map: "IX_ScheduledNotification_ScheduledAt")
+  @@index([ChildReminderId], map: "IX_ScheduledNotification_ChildReminderId")
+  @@index([ChildReminderId, NotificationType, Status], map: "IX_ScheduledNotification_Child_Type_Status")
 }
 
 model DeliveredNotification {
