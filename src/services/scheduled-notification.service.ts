@@ -18,6 +18,7 @@ import type {
   CreateScheduledNotificationBody,
   GetDeliveredNotificationsQuery,
 } from '../validators/scheduled-notification.validator';
+import { IMMEDIATE_NOTIFICATION_THRESHOLD_MS } from '../constants/app-notification.constants';
 import { resolveScheduledEnqueueTime } from '../utils/reminder-schedule-time.util';
 
 export type InternalCreateScheduledNotificationInput = {
@@ -146,8 +147,8 @@ export class ScheduledNotificationService {
   }
 
   /**
-   * Creates a SCHEDULED row, enqueues a scheduled Azure Service Bus message,
-   * then stores the Azure sequence number on AzureMessageId.
+   * Creates a SCHEDULED row and enqueues on Azure Service Bus.
+   * Near-term scheduledAt values are published immediately; future times use scheduleMessages.
    */
   async create(input: CreateScheduledNotificationBody): Promise<ScheduledNotificationResponseDto> {
     const userId = BigInt(input.userId);
@@ -189,7 +190,10 @@ export class ScheduledNotificationService {
       throw new ValidationError('NOTIFICATION_QUEUE_NAME is not configured');
     }
 
-    const enqueueAt = resolveScheduledEnqueueTime(input.scheduledAt);
+    const deliverImmediately = this.#shouldDeliverImmediately(input.scheduledAt);
+    const enqueueAt = deliverImmediately
+      ? new Date()
+      : resolveScheduledEnqueueTime(input.scheduledAt);
     const deviceToken = await this.#repository.findUserDeviceToken(input.userId);
 
     const created = await this.#repository.create({
@@ -224,32 +228,49 @@ export class ScheduledNotificationService {
       },
     };
 
+    const queueOptions = {
+      correlationId: created.Id.toString(),
+      metadata: {
+        scheduledNotificationId: created.Id.toString(),
+        ...(input.notificationType ? { notificationType: input.notificationType } : {}),
+        ...(input.childReminderId !== undefined
+          ? { childReminderId: input.childReminderId.toString() }
+          : {}),
+      },
+      subject: NotificationEventTypes.SCHEDULED,
+    };
+
     let azureMessageId: string;
 
     try {
-      const scheduled = await this.#messaging.scheduler.schedule({
-        queueName,
-        eventType: NotificationEventTypes.DISPATCH,
-        payload,
-        scheduledEnqueueTime: enqueueAt,
-        options: {
-          correlationId: created.Id.toString(),
-          metadata: {
-            scheduledNotificationId: created.Id.toString(),
-            ...(input.notificationType ? { notificationType: input.notificationType } : {}),
-            ...(input.childReminderId !== undefined
-              ? { childReminderId: input.childReminderId.toString() }
-              : {}),
-          },
-          subject: NotificationEventTypes.SCHEDULED,
-        },
-      });
+      if (deliverImmediately) {
+        const envelope = await this.#messaging.publisher.publish({
+          queueName,
+          eventType: NotificationEventTypes.DISPATCH,
+          payload,
+          options: queueOptions,
+        });
 
-      azureMessageId = scheduled.sequenceNumber.toString();
+        azureMessageId = envelope.messageId;
+      } else {
+        const scheduled = await this.#messaging.scheduler.schedule({
+          queueName,
+          eventType: NotificationEventTypes.DISPATCH,
+          payload,
+          scheduledEnqueueTime: enqueueAt,
+          options: queueOptions,
+        });
+
+        azureMessageId = scheduled.sequenceNumber.toString();
+      }
     } catch (error) {
       await this.#repository.markFailed(
         created.Id,
-        error instanceof Error ? error.message : 'Failed to schedule Azure Service Bus message',
+        error instanceof Error
+          ? error.message
+          : deliverImmediately
+            ? 'Failed to publish Azure Service Bus message'
+            : 'Failed to schedule Azure Service Bus message',
       );
 
       throw error;
@@ -265,9 +286,12 @@ export class ScheduledNotificationService {
         notificationType: input.notificationType,
         azureMessageId,
         scheduledAt: enqueueAt.toISOString(),
+        deliverImmediately,
         queueName,
       },
-      'scheduled notification created and queued',
+      deliverImmediately
+        ? 'notification created and published immediately'
+        : 'scheduled notification created and queued',
     );
 
     return this.#toResponseDto(updated);
@@ -347,10 +371,15 @@ export class ScheduledNotificationService {
     return { cancelledCount };
   }
 
+  #shouldDeliverImmediately(scheduledAt: Date): boolean {
+    return scheduledAt.getTime() <= Date.now() + IMMEDIATE_NOTIFICATION_THRESHOLD_MS;
+  }
+
   async #cancelAzureSchedule(azureMessageId: string | null): Promise<void> {
     const queueName = config.NOTIFICATION_QUEUE_NAME;
 
-    if (!queueName || !azureMessageId) {
+    // Immediate publishes store messageId (UUID), not a schedule sequence number.
+    if (!queueName || !azureMessageId || !/^-?\d+$/.test(azureMessageId)) {
       return;
     }
 
