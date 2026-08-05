@@ -9,6 +9,8 @@ export type CreateScheduledNotificationDto = {
   scheduledAt: string;
   childReminderId?: number;
   notificationType?: string;
+  clientEventId?: string;
+  screen?: string;
 };
 
 export type ScheduledNotificationResponseDto = {
