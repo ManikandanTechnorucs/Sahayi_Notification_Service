@@ -11,6 +11,8 @@ export const APP_NOTIFICATION_TYPES = {
   CARE_RECIPIENT_REQUEST: 'CareRecipientRequest',
   CARE_RECIPIENT_REQUEST_ACCEPTED: 'CareRecipientRequestAccepted',
   CARE_RECIPIENT_REQUEST_REJECTED: 'CareRecipientRequestRejected',
+  FALL_DETECTED: 'FallDetected',
+  FALL_EMERGENCY: 'FallEmergency',
 } as const;
 
 export type AppNotificationType =

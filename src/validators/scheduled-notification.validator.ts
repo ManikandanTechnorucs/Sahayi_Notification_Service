@@ -52,6 +52,18 @@ export const createScheduledNotificationSchema = {
           .min(1, 'notificationType must not be empty')
           .max(50, 'notificationType must be at most 50 characters')
           .optional(),
+        clientEventId: z
+          .string()
+          .trim()
+          .min(8, 'clientEventId must be at least 8 characters')
+          .max(64, 'clientEventId must be at most 64 characters')
+          .optional(),
+        screen: z
+          .string()
+          .trim()
+          .min(1, 'screen must not be empty')
+          .max(100, 'screen must be at most 100 characters')
+          .optional(),
       })
       .strict(),
   ),

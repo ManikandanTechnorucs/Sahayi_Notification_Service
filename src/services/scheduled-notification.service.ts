@@ -28,6 +28,8 @@ export type InternalCreateScheduledNotificationInput = {
   scheduledAt: Date;
   childReminderId?: bigint;
   notificationType?: string;
+  clientEventId?: string;
+  screen?: string;
 };
 
 /**
@@ -173,6 +175,8 @@ export class ScheduledNotificationService {
       scheduledAt: input.scheduledAt,
       ...(childReminderId !== undefined ? { childReminderId } : {}),
       ...(input.notificationType !== undefined ? { notificationType: input.notificationType } : {}),
+      ...(input.clientEventId !== undefined ? { clientEventId: input.clientEventId } : {}),
+      ...(input.screen !== undefined ? { screen: input.screen } : {}),
     });
 
     return row;
@@ -222,9 +226,13 @@ export class ScheduledNotificationService {
         ...(input.childReminderId !== undefined
           ? { childReminderId: input.childReminderId.toString() }
           : {}),
+        ...(input.clientEventId ? { clientEventId: input.clientEventId } : {}),
+        ...(input.screen ? { screen: input.screen } : {}),
       },
       metadata: {
         scheduledFor: enqueueAt.toISOString(),
+        ...(input.clientEventId ? { clientEventId: input.clientEventId } : {}),
+        ...(input.screen ? { screen: input.screen } : {}),
       },
     };
 
@@ -236,6 +244,8 @@ export class ScheduledNotificationService {
         ...(input.childReminderId !== undefined
           ? { childReminderId: input.childReminderId.toString() }
           : {}),
+        ...(input.clientEventId ? { clientEventId: input.clientEventId } : {}),
+        ...(input.screen ? { screen: input.screen } : {}),
       },
       subject: NotificationEventTypes.SCHEDULED,
     };
