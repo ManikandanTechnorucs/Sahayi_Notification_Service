@@ -22,6 +22,8 @@
 //   7. Reminders
 //   8. Health history
 //   9. Notifications & devices
+//  10. Fall detection
+//  11. AI voice usage tracking
 // =============================================================================
 
 generator client {
@@ -42,6 +44,57 @@ datasource db {
 enum users_Platform {
   ANDROID
   IOS
+}
+
+enum UserAIUsageType {
+  USER_VOICE
+  AI_VOICE
+}
+
+enum ScheduledNotificationStatus {
+  SCHEDULED
+  PROCESSING
+  SENT
+  DELIVERED
+  FAILED
+  CANCELLED
+}
+
+enum FallDetectionEventStatus {
+  PENDING
+  SAFE
+  EMERGENCY
+  NO_RESPONSE
+}
+
+enum FallDetectionUserResponse {
+  IM_OK
+  NEED_HELP
+  NONE
+}
+
+enum FallDetectionNetworkStatus {
+  ONLINE
+  CELLULAR_ONLY
+  OFFLINE
+}
+
+enum FallAlertDeliveryChannel {
+  SMS
+  PUSH
+}
+
+enum FallAlertDeliveryProvider {
+  TWILIO
+  DEVICE_SMS
+  FCM
+}
+
+enum FallAlertDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED_DUPLICATE
 }
 
 // -----------------------------------------------------------------------------
@@ -104,6 +157,17 @@ model aivoicemaster {
   Id        Int       @id @default(autoincrement())
   Name      String    @unique(map: "UX_AIVoiceMaster_Name") @db.VarChar(100)
   Label     String    @unique(map: "UX_AIVoiceMaster_Label") @db.VarChar(100)
+  IsActive  Boolean   @default(true)
+  CreatedAt DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt DateTime? @db.DateTime(0)
+
+  users users[]
+}
+
+model ailanguagemaster {
+  Id        Int       @id @default(autoincrement())
+  Name      String    @unique(map: "UX_AILanguageMaster_Name") @db.VarChar(100)
+  Label     String    @unique(map: "UX_AILanguageMaster_Label") @db.VarChar(100)
   IsActive  Boolean   @default(true)
   CreatedAt DateTime  @default(now()) @db.DateTime(0)
   UpdatedAt DateTime? @db.DateTime(0)
@@ -200,7 +264,10 @@ model users {
   MealsPerDay     String? @db.VarChar(50)
   ExerciseRoutine String? @db.VarChar(200)
 
-  Otp          Int       @default(0)
+  PasswordHash String? @db.VarChar(255)
+  PasswordUpdated Boolean? @default(false)
+
+  Otp          Int?       @default(0)
   OtpExpiresAt DateTime? @db.DateTime(0)
 
   FcmToken String?         @db.VarChar(500)
@@ -230,6 +297,8 @@ model users {
   userdevicetoken      userdevicetoken[]
   ScheduledNotification ScheduledNotification[]
   DeliveredNotifications DeliveredNotification[]
+  FallDetectionEvents    FallDetectionEvent[]
+  UserAIUsage            UserAIUsage[]
 
   // Relationship requests (sent / received)
   SentRelationshipRequests     userrelationshiprequest[] @relation("RequestFromUser")
@@ -372,6 +441,7 @@ model childreminder {
   notificationschedule   childremindernotificationschedule[]
   scheduledNotifications ScheduledNotification[]
 
+  @@unique([MasterReminderId, ReminderDate], map: "UX_ChildReminder_Master_Date")
   @@index([MasterReminderId, ReminderDate, IsActive], map: "IX_ChildReminder_Master_Date_Active")
   @@index([MasterReminderId], map: "IX_ChildReminder_MasterReminderId")
   @@index([ReminderDate], map: "IX_ChildReminder_ReminderDate")
@@ -564,16 +634,6 @@ model daily_questions {
   created_at       DateTime? @default(now()) @db.Timestamp(0)
 }
 
-
-enum ScheduledNotificationStatus {
-  SCHEDULED
-  PROCESSING
-  SENT
-  DELIVERED
-  FAILED
-  CANCELLED
-}
-
 model ScheduledNotification {
   Id               BigInt                        @id @default(autoincrement())
   UserId           BigInt
@@ -626,4 +686,80 @@ model DeliveredNotification {
   @@index([ScheduledNotificationId], map: "IX_DeliveredNotification_ScheduledNotificationId")
   @@index([DeliveredAt], map: "IX_DeliveredNotification_DeliveredAt")
   @@index([IsRead], map: "IX_DeliveredNotification_IsRead")
+}
+
+// -----------------------------------------------------------------------------
+// FALL DETECTION
+// -----------------------------------------------------------------------------
+
+model FallDetectionEvent {
+  Id                       BigInt                     @id @default(autoincrement())
+  ClientEventId            String                     @unique(map: "UX_FallDetectionEvent_ClientEventId") @db.VarChar(64)
+  UserId                   BigInt
+  Status                   FallDetectionEventStatus   @default(PENDING)
+  DetectedAt               DateTime                   @db.DateTime(0)
+  DeviceDetectedAt         DateTime                   @db.DateTime(0)
+  ResolvedAt               DateTime?                  @db.DateTime(0)
+  SyncedAt                 DateTime?                  @db.DateTime(0)
+  Latitude                 Decimal?                   @db.Decimal(10, 7)
+  Longitude                Decimal?                   @db.Decimal(10, 7)
+  DetectionSource          String                     @default("phone_sensors") @db.VarChar(50)
+  UserResponse             FallDetectionUserResponse  @default(NONE)
+  ResponseAt               DateTime?                  @db.DateTime(0)
+  NetworkStatusAtDetection FallDetectionNetworkStatus @default(ONLINE)
+  CountdownSeconds         Int                        @default(15)
+  CreatedAt                DateTime                   @default(now()) @db.DateTime(0)
+  UpdatedAt                DateTime?                  @db.DateTime(0)
+
+  users      users               @relation(fields: [UserId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_FallDetectionEvent_User")
+  deliveries FallAlertDelivery[]
+
+  @@index([UserId, DetectedAt], map: "IX_FallDetectionEvent_User_DetectedAt")
+  @@index([Status], map: "IX_FallDetectionEvent_Status")
+}
+
+model FallAlertDelivery {
+  Id                BigInt                    @id @default(autoincrement())
+  FallEventId       BigInt
+  Channel           FallAlertDeliveryChannel
+  RecipientKey      String                    @db.VarChar(100)
+  RecipientName     String                    @db.VarChar(150)
+  Source            String                    @db.VarChar(50)
+  Provider          FallAlertDeliveryProvider
+  ProviderMessageId String?                   @db.VarChar(200)
+  Status            FallAlertDeliveryStatus   @default(PENDING)
+  IdempotencyKey    String                    @unique(map: "UX_FallAlertDelivery_IdempotencyKey") @db.VarChar(200)
+  SentAt            DateTime?                 @db.DateTime(0)
+  ErrorMessage      String?                   @db.VarChar(1000)
+  CreatedAt         DateTime                  @default(now()) @db.DateTime(0)
+  UpdatedAt         DateTime?                 @db.DateTime(0)
+
+  fallEvent FallDetectionEvent @relation(fields: [FallEventId], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "FK_FallAlertDelivery_FallEvent")
+
+  @@index([FallEventId], map: "IX_FallAlertDelivery_FallEventId")
+  @@index([Status], map: "IX_FallAlertDelivery_Status")
+}
+
+// -----------------------------------------------------------------------------
+// AI VOICE USAGE TRACKING
+// -----------------------------------------------------------------------------
+
+/// Tracks user-uploaded and AI-generated voice durations for reporting / limits.
+model UserAIUsage {
+  Id            BigInt          @id @default(autoincrement())
+  UserId        BigInt
+  Type          UserAIUsageType
+  /// Audio duration in seconds.
+  AIUsage       Decimal         @db.Decimal(12, 3)
+  SessionId     String          @db.VarChar(100)
+  AudioFileName String          @db.VarChar(500)
+  CreatedAt     DateTime        @default(now()) @db.DateTime(0)
+  UpdatedAt     DateTime?       @updatedAt @db.DateTime(0)
+
+  users users @relation(fields: [UserId], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "FK_UserAIUsage_User")
+
+  @@index([UserId], map: "IX_UserAIUsage_UserId")
+  @@index([SessionId], map: "IX_UserAIUsage_SessionId")
+  @@index([Type], map: "IX_UserAIUsage_Type")
+  @@index([CreatedAt], map: "IX_UserAIUsage_CreatedAt")
 }
