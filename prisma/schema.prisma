@@ -164,17 +164,6 @@ model aivoicemaster {
   users users[]
 }
 
-model ailanguagemaster {
-  Id        Int       @id @default(autoincrement())
-  Name      String    @unique(map: "UX_AILanguageMaster_Name") @db.VarChar(100)
-  Label     String    @unique(map: "UX_AILanguageMaster_Label") @db.VarChar(100)
-  IsActive  Boolean   @default(true)
-  CreatedAt DateTime  @default(now()) @db.DateTime(0)
-  UpdatedAt DateTime? @db.DateTime(0)
-
-  users users[]
-}
-
 // Reminder masters: referenced by masterreminder and childreminder
 model categoriesmaster {
   Id            BigInt    @id @default(autoincrement())
