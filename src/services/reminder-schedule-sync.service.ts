@@ -215,12 +215,13 @@ export class ReminderScheduleSyncService {
       ];
 
       for (const phase of phases) {
-        const isPastPhase =
-          phase.scheduledAt.getTime() < now - REMINDER_SYNC_PAST_PHASE_SKIP_MS;
-
-        if (isPastPhase && phase.alreadySent) {
+        // Never recreate a phase that was already delivered for this child.
+        if (phase.alreadySent) {
           continue;
         }
+
+        const isPastPhase =
+          phase.scheduledAt.getTime() < now - REMINDER_SYNC_PAST_PHASE_SKIP_MS;
 
         if (isPastPhase) {
           continue;

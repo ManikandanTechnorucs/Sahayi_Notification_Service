@@ -200,11 +200,13 @@ export class ScheduledNotificationService {
       : resolveScheduledEnqueueTime(input.scheduledAt);
     const deviceToken = await this.#repository.findUserDeviceToken(input.userId);
 
+    // Persist desired fire time (not enqueueAt) so sync drift checks stay accurate
+    // after immediate publishes that use "now" as the Azure enqueue time.
     const created = await this.#repository.create({
       userId: input.userId,
       title: input.title,
       message: input.message,
-      scheduledAt: enqueueAt,
+      scheduledAt: input.scheduledAt,
       status: ScheduledNotificationStatus.SCHEDULED,
       deviceToken,
       childReminderId: input.childReminderId ?? null,
@@ -295,7 +297,8 @@ export class ScheduledNotificationService {
         childReminderId: input.childReminderId?.toString(),
         notificationType: input.notificationType,
         azureMessageId,
-        scheduledAt: enqueueAt.toISOString(),
+        scheduledAt: input.scheduledAt.toISOString(),
+        enqueueAt: enqueueAt.toISOString(),
         deliverImmediately,
         queueName,
       },
