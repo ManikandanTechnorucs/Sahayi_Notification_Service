@@ -9,6 +9,7 @@
     "start:notification": "node --use-system-ca -r ts-node/register src/server.ts",
     "start": "npm run start:notification",
     "dev": "nodemon --exec \"node --use-system-ca -r ts-node/register src/server.ts\"",
+    "test": "jest --config jest.config.cjs",
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate dev"
   },

@@ -50,5 +50,6 @@
       "module": "CommonJS",
       "moduleResolution": "node"
     }
-  }
+  },
+  "exclude": ["node_modules", "**/__tests__/**", "**/*.test.ts"]
 }
