@@ -90,6 +90,24 @@ export const getDeliveredNotificationsQuerySchema = {
     .strict(),
 };
 
+/**
+ * Request body for bulk marking delivered notifications as read.
+ */
+export const bulkMarkDeliveredReadSchema = {
+  body: z
+    .object({
+      ids: z
+        .array(
+          z.coerce.number().int().positive({
+            message: 'each id must be a positive integer',
+          }),
+        )
+        .min(1, 'ids must contain at least one id')
+        .max(100, 'ids must contain at most 100 items'),
+    })
+    .strict(),
+};
+
 export const cancelScheduledNotificationParamsSchema = {
   params: z
     .object({
@@ -125,3 +143,5 @@ export type CreateScheduledNotificationBody = z.infer<
 export type GetDeliveredNotificationsQuery = z.infer<
   typeof getDeliveredNotificationsQuerySchema.query
 >;
+
+export type BulkMarkDeliveredReadBody = z.infer<typeof bulkMarkDeliveredReadSchema.body>;

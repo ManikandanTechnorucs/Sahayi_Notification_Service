@@ -243,4 +243,44 @@ export class ScheduledNotificationRepository {
 
     return device?.FcmToken ?? null;
   }
+
+  /**
+   * Marks the given delivered notifications as read for a user.
+   * Only unread rows owned by the user are updated.
+   */
+  async markDeliveredAsRead(
+    userId: bigint,
+    ids: bigint[],
+    readAt: Date,
+  ): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+
+    const result = await prisma.deliveredNotification.updateMany({
+      where: {
+        UserId: userId,
+        Id: { in: ids },
+        IsRead: false,
+      },
+      data: {
+        IsRead: true,
+        ReadAt: readAt,
+      },
+    });
+
+    return result.count;
+  }
+
+  /**
+   * Counts unread delivered notifications for a user.
+   */
+  async countUnreadDeliveredByUserId(userId: bigint): Promise<number> {
+    return prisma.deliveredNotification.count({
+      where: {
+        UserId: userId,
+        IsRead: false,
+      },
+    });
+  }
 }
