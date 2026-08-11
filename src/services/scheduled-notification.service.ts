@@ -10,11 +10,14 @@ import type { MessagingInfrastructure } from '../../libs/messaging/src/index';
 import { NotFoundError, ValidationError } from '../errors/app-error';
 import type { ScheduledNotificationRepository } from '../repositories/scheduled-notification.repository';
 import type {
+  BulkMarkDeliveredReadResultDto,
   DeliveredNotificationListResult,
   DeliveredNotificationResponseDto,
   ScheduledNotificationResponseDto,
+  UnreadDeliveredCountDto,
 } from '../dto/scheduled-notification.dto';
 import type {
+  BulkMarkDeliveredReadBody,
   CreateScheduledNotificationBody,
   GetDeliveredNotificationsQuery,
 } from '../validators/scheduled-notification.validator';
@@ -84,6 +87,61 @@ export class ScheduledNotificationService {
       total,
       totalPages,
     };
+  }
+
+  /**
+   * Bulk-marks delivered notifications as read for the authenticated user.
+   */
+  async bulkMarkDeliveredAsRead(
+    userId: string,
+    input: BulkMarkDeliveredReadBody,
+  ): Promise<BulkMarkDeliveredReadResultDto> {
+    let parsedUserId: bigint;
+
+    try {
+      parsedUserId = BigInt(userId);
+    } catch {
+      throw new ValidationError('Authenticated user id is invalid');
+    }
+
+    const ids = [...new Set(input.ids.map((id) => BigInt(id)))];
+    const readAt = new Date();
+    const updatedCount = await this.#repository.markDeliveredAsRead(
+      parsedUserId,
+      ids,
+      readAt,
+    );
+
+    logger.info(
+      {
+        userId: parsedUserId.toString(),
+        requestedCount: ids.length,
+        updatedCount,
+      },
+      'delivered notifications marked as read',
+    );
+
+    return {
+      updatedCount,
+      readAt: readAt.toISOString(),
+    };
+  }
+
+  /**
+   * Returns unread delivered notification count for the authenticated user.
+   */
+  async getUnreadDeliveredCount(userId: string): Promise<UnreadDeliveredCountDto> {
+    let parsedUserId: bigint;
+
+    try {
+      parsedUserId = BigInt(userId);
+    } catch {
+      throw new ValidationError('Authenticated user id is invalid');
+    }
+
+    const unreadCount = await this.#repository.countUnreadDeliveredByUserId(parsedUserId);
+
+    return { unreadCount };
   }
 
   #toDeliveredResponseDto(notification: {

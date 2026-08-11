@@ -3,6 +3,7 @@ import { validate } from '../../libs/validation/src/validate';
 import { requireAuth } from '../middlewares/auth.middleware';
 import type { ScheduledNotificationController } from '../controllers/scheduled-notification.controller';
 import {
+  bulkMarkDeliveredReadSchema,
   cancelByChildReminderParamsSchema,
   cancelScheduledNotificationParamsSchema,
   createScheduledNotificationSchema,
@@ -38,6 +39,19 @@ export function createScheduledNotificationRoutes(
     requireAuth,
     validate(cancelScheduledNotificationParamsSchema),
     controller.cancel,
+  );
+
+  router.get(
+    '/delivered-notification/unread-count',
+    requireAuth,
+    controller.getUnreadDeliveredCount,
+  );
+
+  router.patch(
+    '/delivered-notification/mark-read',
+    requireAuth,
+    validate(bulkMarkDeliveredReadSchema),
+    controller.bulkMarkDeliveredAsRead,
   );
 
   router.get(

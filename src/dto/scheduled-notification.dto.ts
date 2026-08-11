@@ -71,3 +71,16 @@ export type DeliveredNotificationListResult = {
   total: number;
   totalPages: number;
 };
+
+export type BulkMarkDeliveredReadDto = {
+  ids: number[];
+};
+
+export type BulkMarkDeliveredReadResultDto = {
+  updatedCount: number;
+  readAt: string;
+};
+
+export type UnreadDeliveredCountDto = {
+  unreadCount: number;
+};

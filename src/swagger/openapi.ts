@@ -184,6 +184,56 @@ export const openApiDocument = {
           totalPages: { type: 'integer', example: 2 },
         },
       },
+      BulkMarkDeliveredReadDto: {
+        type: 'object',
+        required: ['ids'],
+        additionalProperties: false,
+        properties: {
+          ids: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 100,
+            items: { type: 'integer', minimum: 1 },
+            example: [18, 19, 20],
+            description: 'DeliveredNotification ids owned by the authenticated user',
+          },
+        },
+      },
+      BulkMarkDeliveredReadResultDto: {
+        type: 'object',
+        properties: {
+          updatedCount: { type: 'integer', example: 3 },
+          readAt: {
+            type: 'string',
+            format: 'date-time',
+            example: '2026-08-11T15:30:00.000Z',
+          },
+        },
+      },
+      BulkMarkDeliveredReadResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          code: { type: 'string', example: 'DATA_UPDATED' },
+          message: { type: 'string', example: 'Data updated successfully' },
+          data: { $ref: '#/components/schemas/BulkMarkDeliveredReadResultDto' },
+        },
+      },
+      UnreadDeliveredCountDto: {
+        type: 'object',
+        properties: {
+          unreadCount: { type: 'integer', example: 5 },
+        },
+      },
+      UnreadDeliveredCountResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          code: { type: 'integer', example: 200 },
+          message: { type: 'string', example: 'Success' },
+          data: { $ref: '#/components/schemas/UnreadDeliveredCountDto' },
+        },
+      },
       NoDataFoundResponse: {
         type: 'object',
         properties: {
@@ -395,6 +445,111 @@ export const openApiDocument = {
                     },
                   },
                 },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation error',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '401': {
+            description: 'Missing or invalid JWT',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/UnauthorizedResponse' },
+              },
+            },
+          },
+          '500': {
+            description: 'Unexpected server error',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/OopsErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/notifications/delivered-notification/unread-count': {
+      get: {
+        tags: ['Scheduled Notifications'],
+        summary: 'Get unread delivered notification count',
+        description:
+          'Returns the count of DeliveredNotification rows for the authenticated user where IsRead is false.',
+        operationId: 'getUnreadDeliveredNotificationCount',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'Unread count for the authenticated user',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/UnreadDeliveredCountResponse' },
+                examples: {
+                  default: {
+                    summary: 'Unread count',
+                    value: {
+                      success: true,
+                      code: 200,
+                      message: 'Success',
+                      data: { unreadCount: 5 },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '401': {
+            description: 'Missing or invalid JWT',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/UnauthorizedResponse' },
+              },
+            },
+          },
+          '500': {
+            description: 'Unexpected server error',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/OopsErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/notifications/delivered-notification/mark-read': {
+      patch: {
+        tags: ['Scheduled Notifications'],
+        summary: 'Bulk mark delivered notifications as read',
+        description:
+          'Sets IsRead=true and ReadAt=now for the given DeliveredNotification ids belonging to the authenticated user. Already-read rows are skipped.',
+        operationId: 'bulkMarkDeliveredNotificationsAsRead',
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/BulkMarkDeliveredReadDto' },
+              examples: {
+                default: {
+                  summary: 'Mark selected notifications as read',
+                  value: { ids: [18, 19, 20] },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Delivered notifications updated',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/BulkMarkDeliveredReadResponse' },
               },
             },
           },

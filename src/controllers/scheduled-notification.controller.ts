@@ -3,7 +3,10 @@ import { response } from '../../libs/response/src/response';
 import type { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import type { ReminderScheduleSyncService } from '../services/reminder-schedule-sync.service';
 import type { ScheduledNotificationService } from '../services/scheduled-notification.service';
-import type { CreateScheduledNotificationBody } from '../validators/scheduled-notification.validator';
+import type {
+  BulkMarkDeliveredReadBody,
+  CreateScheduledNotificationBody,
+} from '../validators/scheduled-notification.validator';
 
 type CancelScheduledNotificationParams = {
   id: string;
@@ -28,6 +31,8 @@ export class ScheduledNotificationController {
     this.#reminderSyncService = reminderSyncService;
     this.create = this.create.bind(this);
     this.getDelivered = this.getDelivered.bind(this);
+    this.bulkMarkDeliveredAsRead = this.bulkMarkDeliveredAsRead.bind(this);
+    this.getUnreadDeliveredCount = this.getUnreadDeliveredCount.bind(this);
     this.cancel = this.cancel.bind(this);
     this.cancelByChildReminder = this.cancelByChildReminder.bind(this);
     this.syncTodayReminders = this.syncTodayReminders.bind(this);
@@ -105,6 +110,56 @@ export class ScheduledNotificationController {
         limit: result.limit,
         totalPages: result.totalPages,
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PATCH /notifications/delivered-notification/mark-read
+   * Bulk marks delivered notifications as read for the authenticated user.
+   */
+  async bulkMarkDeliveredAsRead(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
+    try {
+      if (!req.user?.id) {
+        res.status(401).json(response.UNAUTHORIZED);
+        return;
+      }
+
+      const body = req.body as BulkMarkDeliveredReadBody;
+      const data = await this.#service.bulkMarkDeliveredAsRead(req.user.id, body);
+
+      res.status(200).json({
+        ...response.DATA_UPDATED,
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /notifications/delivered-notification/unread-count
+   * Returns unread delivered notification count for the authenticated user.
+   */
+  async getUnreadDeliveredCount(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
+    try {
+      if (!req.user?.id) {
+        res.status(401).json(response.UNAUTHORIZED);
+        return;
+      }
+
+      const data = await this.#service.getUnreadDeliveredCount(req.user.id);
+
+      res.status(200).json(response.createJson(response.SUCCESS_CODE, data));
     } catch (error) {
       next(error);
     }
