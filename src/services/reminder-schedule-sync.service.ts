@@ -1,6 +1,7 @@
 import { config } from '../../libs/config/src/config';
 import { logger } from '../../libs/logger/src/logger';
 import {
+  CAREGIVER_REMINDER_MISSED_TYPE,
   REMINDER_NOTIFICATION_TYPES,
   REMINDER_SYNC_PAST_PHASE_SKIP_MS,
   REMINDER_SYNC_TIME_DRIFT_MS,
@@ -143,6 +144,10 @@ export class ReminderScheduleSyncService {
 
       for (const schedules of existingByKey.values()) {
         for (const schedule of schedules) {
+          if (schedule.NotificationType === CAREGIVER_REMINDER_MISSED_TYPE) {
+            continue;
+          }
+
           await this.#scheduledNotificationService.cancel(schedule.Id.toString());
           cancelledCount += 1;
         }
