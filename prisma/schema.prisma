@@ -309,10 +309,9 @@ model FamilyMembers {
   Name         String
   Relationship String
   PhoneNumber  String
+  Email        String? @db.VarChar(200)
 
-  IsViewReminders Boolean @default(false)
-  IsAlerts        Boolean @default(false)
-  IsHealthReports Boolean @default(false)
+  WeeklySummary Boolean? @default(false)
 
   userId BigInt
   users  users  @relation(fields: [userId], references: [Id], onDelete: Cascade)

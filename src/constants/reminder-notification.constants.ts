@@ -6,6 +6,9 @@ export const REMINDER_NOTIFICATION_TYPES = {
 
 export const REMINDER_NOTIFICATION_TYPE_VALUES = Object.values(REMINDER_NOTIFICATION_TYPES);
 
+/** Caregiver fan-out after a user missed reminder. Not a user reminder phase. */
+export const CAREGIVER_REMINDER_MISSED_TYPE = 'CaregiverReminderMissed';
+
 export type ReminderNotificationType =
   (typeof REMINDER_NOTIFICATION_TYPES)[keyof typeof REMINDER_NOTIFICATION_TYPES];
 
