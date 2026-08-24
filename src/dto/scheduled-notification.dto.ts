@@ -57,6 +57,7 @@ export type DeliveredNotificationResponseDto = {
   userId: string;
   title: string;
   message: string;
+  notificationAudioUrl: string | null;
   deliveredAt: string;
   readAt: string | null;
   isRead: boolean;

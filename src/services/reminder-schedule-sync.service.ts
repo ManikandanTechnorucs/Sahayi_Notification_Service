@@ -12,7 +12,8 @@ import type { ScheduledNotificationRepository } from '../repositories/scheduled-
 import type { ScheduledNotificationService } from './scheduled-notification.service';
 import {
   combineReminderDateAndTime,
-  getLocalDayRange,
+  getUtcDatePadRange,
+  getUtcFireWindow,
 } from '../utils/reminder-schedule-time.util';
 import type { ScheduledNotification } from '../../generated/prisma/client';
 
@@ -26,7 +27,7 @@ type DesiredSchedule = {
 };
 
 /**
- * Reconciles reminder notification schedules for today's pending child reminders.
+ * Reconciles reminder notification schedules for near-term pending child reminders.
  */
 export class ReminderScheduleSyncService {
   readonly #childReminderRepository: ChildReminderRepository;
@@ -46,7 +47,7 @@ export class ReminderScheduleSyncService {
   }
 
   /**
-   * Runs one sync pass for the current local day.
+   * Runs one sync pass for pending children whose unsent phases fall in now–1h … now+36h.
    */
   async sync(): Promise<void> {
     if (this.#isRunning) {
@@ -57,7 +58,8 @@ export class ReminderScheduleSyncService {
     this.#isRunning = true;
 
     try {
-      const { dayStart, dayEnd } = getLocalDayRange();
+      const { windowStart, windowEnd } = getUtcFireWindow();
+      const { dayStart, dayEnd } = getUtcDatePadRange(windowStart, windowEnd);
       const pendingChildren = await this.#childReminderRepository.findActivePendingForDate(
         dayStart,
         dayEnd,
@@ -162,8 +164,9 @@ export class ReminderScheduleSyncService {
           rescheduledCount,
           dayStart: dayStart.toISOString(),
           dayEnd: dayEnd.toISOString(),
+          windowStart: windowStart.toISOString(),
+          windowEnd: windowEnd.toISOString(),
           sampleFireAt: desiredSchedules[0]?.scheduledAt.toISOString(),
-          timeZone: config.REMINDER_TIMEZONE,
         },
         'reminder schedule sync completed',
       );

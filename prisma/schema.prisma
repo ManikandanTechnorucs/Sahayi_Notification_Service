@@ -394,6 +394,9 @@ model masterreminder {
   StartDate    DateTime  @db.Date
   EndDate      DateTime? @db.Date
   ReminderTime DateTime  @db.Time(0)
+  RecurrenceInterval Int?     @db.Int
+  RecurrenceUnit     String?  @db.VarChar(16)
+  RecurrenceWeekdays String?  @db.VarChar(32)
   IsActive     Boolean   @default(true)
   CreatedAt    DateTime  @default(now()) @db.DateTime(0)
   UpdatedAt    DateTime? @db.DateTime(0)
@@ -429,7 +432,6 @@ model childreminder {
   notificationschedule   childremindernotificationschedule[]
   scheduledNotifications ScheduledNotification[]
 
-  @@unique([MasterReminderId, ReminderDate], map: "UX_ChildReminder_Master_Date")
   @@index([MasterReminderId, ReminderDate, IsActive], map: "IX_ChildReminder_Master_Date_Active")
   @@index([MasterReminderId], map: "IX_ChildReminder_MasterReminderId")
   @@index([ReminderDate], map: "IX_ChildReminder_ReminderDate")
@@ -659,6 +661,8 @@ model DeliveredNotification {
 
   Title   String @db.VarChar(200)
   Message String @db.VarChar(1000)
+
+  NotificationAudioUrl String? @db.VarChar(2000)
 
   DeliveredAt DateTime  @db.DateTime(0)
   ReadAt      DateTime? @db.DateTime(0)

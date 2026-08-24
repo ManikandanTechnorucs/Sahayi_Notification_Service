@@ -137,6 +137,11 @@ export const openApiDocument = {
           userId: { type: 'string', example: '7' },
           title: { type: 'string', example: 'Medication reminder' },
           message: { type: 'string', example: 'Time to take your evening medication' },
+          notificationAudioUrl: {
+            type: 'string',
+            nullable: true,
+            example: 'https://cdn.example.com/reminder-missed.mp3',
+          },
           deliveredAt: {
             type: 'string',
             format: 'date-time',

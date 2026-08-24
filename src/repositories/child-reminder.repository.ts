@@ -20,7 +20,7 @@ export type ActivePendingChildReminder = {
  */
 export class ChildReminderRepository {
   /**
-   * Loads active PENDING child reminders for the given local calendar day range.
+   * Loads active PENDING child reminders whose UTC ReminderDate is in the given range.
    */
   async findActivePendingForDate(
     dayStart: Date,
