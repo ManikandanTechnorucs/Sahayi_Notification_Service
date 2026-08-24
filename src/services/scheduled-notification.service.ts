@@ -150,6 +150,7 @@ export class ScheduledNotificationService {
     UserId: bigint;
     Title: string;
     Message: string;
+    NotificationAudioUrl: string | null;
     DeliveredAt: Date;
     ReadAt: Date | null;
     IsRead: boolean;
@@ -180,6 +181,7 @@ export class ScheduledNotificationService {
       userId: notification.UserId.toString(),
       title: notification.Title,
       message: notification.Message,
+      notificationAudioUrl: notification.NotificationAudioUrl ?? null,
       deliveredAt: notification.DeliveredAt.toISOString(),
       readAt: notification.ReadAt?.toISOString() ?? null,
       isRead: notification.IsRead,
