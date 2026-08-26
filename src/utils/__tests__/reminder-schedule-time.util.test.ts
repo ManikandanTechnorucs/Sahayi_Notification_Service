@@ -14,7 +14,7 @@ describe('combineReminderDateAndTime', () => {
     );
   });
 
-  it('does not re-apply Asia/Kolkata when 8:00 AM IST was stored as 02:30 UTC', () => {
+  it('does not re-apply  when 8:00 AM IST was stored as 02:30 UTC', () => {
     const reminderDate = new Date(Date.UTC(2026, 7, 20));
     const reminderTime = new Date(Date.UTC(1970, 0, 1, 2, 30, 0));
     const fireAt = combineReminderDateAndTime(reminderDate, reminderTime);
