@@ -1,3 +1,5 @@
+import { config } from '../../libs/config/src/config';
+
 /**
  * OpenAPI 3 document for the Notification Service.
  * Kept as a plain object so Swagger UI can serve it without Nest decorators.
@@ -12,8 +14,12 @@ export const openApiDocument = {
   },
   servers: [
     {
-      url: 'http://localhost:3004',
-      description: 'Local notification service',
+      url: `http://localhost:${config.NOTIFICATION_SERVICE_PORT}`,
+      description: 'Local development',
+    },
+    {
+      url: `http://${config.SWAGGER_PUBLIC_HOST}:${config.NOTIFICATION_SERVICE_PORT}`,
+      description: 'Hosted environment',
     },
   ],
   tags: [

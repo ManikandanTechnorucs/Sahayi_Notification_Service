@@ -83,6 +83,8 @@ export const config = {
   REMINDER_AFTER_OFFSET_MINUTES: parsePositiveIntEnv('REMINDER_AFTER_OFFSET_MINUTES', 30),
   REMINDER_SYNC_INTERVAL_MS: parsePositiveIntEnv('REMINDER_SYNC_INTERVAL_MS', 300_000),
   NOTIFICATION_SERVICE_PORT: Number(process.env.NOTIFICATION_SERVICE_PORT ?? 3004),
+  /** Public host used in Swagger "Hosted environment" server URL */
+  SWAGGER_PUBLIC_HOST: getOptionalEnv('SWAGGER_PUBLIC_HOST') ?? '20.40.58.216',
   DELIVERED_NOTIFICATION_DEFAULT_PAGE: parsePositiveIntEnv(
     'DELIVERED_NOTIFICATION_DEFAULT_PAGE',
     1,

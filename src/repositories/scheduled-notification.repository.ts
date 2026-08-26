@@ -4,7 +4,7 @@ import type {
   ScheduledNotification,
   ScheduledNotificationStatus,
 } from '../../generated/prisma/client';
-import { REMINDER_NOTIFICATION_TYPE_VALUES } from '../constants/reminder-notification.constants';
+import { REMINDER_NOTIFICATION_TYPE_VALUES, ACTIVE_SCHEDULE_STATUSES } from '../constants/reminder-notification.constants';
 
 export type CreateScheduledNotificationRecord = {
   userId: bigint;
@@ -26,7 +26,9 @@ export type PaginatedDeliveredNotifications = {
   total: number;
 };
 
-const ACTIVE_STATUSES: ScheduledNotificationStatus[] = ['SCHEDULED', 'PROCESSING', 'FAILED'];
+const ACTIVE_STATUSES: ScheduledNotificationStatus[] = [
+  ...ACTIVE_SCHEDULE_STATUSES,
+];
 
 /**
  * Data-access for ScheduledNotification rows.
