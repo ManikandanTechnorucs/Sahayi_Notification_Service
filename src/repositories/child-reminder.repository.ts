@@ -1,4 +1,5 @@
 import { prisma } from '../../libs/db/src/prisma';
+import { CHILD_REMINDER_STATUS } from '../constants/child-reminder.constants';
 
 export type ActivePendingChildReminder = {
   id: bigint;
@@ -34,10 +35,15 @@ export class ChildReminderRepository {
           lte: dayEnd,
         },
         statusmaster: {
-          StatusName: 'PENDING',
+          StatusName: CHILD_REMINDER_STATUS.PENDING,
         },
         masterreminder: {
           IsActive: true,
+          users: {
+            IsActive: true,
+            IsDeleted: false,
+            IsOnBreak: false,
+          },
         },
       },
       include: {

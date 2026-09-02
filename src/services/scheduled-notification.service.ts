@@ -22,6 +22,9 @@ import type {
   GetDeliveredNotificationsQuery,
 } from '../validators/scheduled-notification.validator';
 import { IMMEDIATE_NOTIFICATION_THRESHOLD_MS } from '../constants/app-notification.constants';
+import { NOTIFICATION_MODULE } from '../constants/reminder-notification.constants';
+import { DataConversionUtil } from '../utils/data-conversion.util';
+import { DateTimeUtil } from '../utils/datetime.util';
 import { resolveScheduledEnqueueTime } from '../utils/reminder-schedule-time.util';
 
 export type InternalCreateScheduledNotificationInput = {
@@ -58,11 +61,9 @@ export class ScheduledNotificationService {
     userId: string,
     query: GetDeliveredNotificationsQuery,
   ): Promise<DeliveredNotificationListResult> {
-    let parsedUserId: bigint;
+    const parsedUserId = DataConversionUtil.parseBigInt(userId);
 
-    try {
-      parsedUserId = BigInt(userId);
-    } catch {
+    if (parsedUserId === null) {
       throw new ValidationError('Authenticated user id is invalid');
     }
 
@@ -96,16 +97,14 @@ export class ScheduledNotificationService {
     userId: string,
     input: BulkMarkDeliveredReadBody,
   ): Promise<BulkMarkDeliveredReadResultDto> {
-    let parsedUserId: bigint;
+    const parsedUserId = DataConversionUtil.parseBigInt(userId);
 
-    try {
-      parsedUserId = BigInt(userId);
-    } catch {
+    if (parsedUserId === null) {
       throw new ValidationError('Authenticated user id is invalid');
     }
 
-    const ids = [...new Set(input.ids.map((id) => BigInt(id)))];
-    const readAt = new Date();
+    const ids = [...new Set(input.ids.map((id) => DataConversionUtil.parseBigIntOrThrow(id)))];
+    const readAt = DateTimeUtil.now();
     const updatedCount = await this.#repository.markDeliveredAsRead(
       parsedUserId,
       ids,
@@ -123,7 +122,7 @@ export class ScheduledNotificationService {
 
     return {
       updatedCount,
-      readAt: readAt.toISOString(),
+      readAt: DateTimeUtil.toISOString(readAt),
     };
   }
 
@@ -131,11 +130,9 @@ export class ScheduledNotificationService {
    * Returns unread delivered notification count for the authenticated user.
    */
   async getUnreadDeliveredCount(userId: string): Promise<UnreadDeliveredCountDto> {
-    let parsedUserId: bigint;
+    const parsedUserId = DataConversionUtil.parseBigInt(userId);
 
-    try {
-      parsedUserId = BigInt(userId);
-    } catch {
+    if (parsedUserId === null) {
       throw new ValidationError('Authenticated user id is invalid');
     }
 
@@ -182,10 +179,10 @@ export class ScheduledNotificationService {
       title: notification.Title,
       message: notification.Message,
       notificationAudioUrl: notification.NotificationAudioUrl ?? null,
-      deliveredAt: notification.DeliveredAt.toISOString(),
-      readAt: notification.ReadAt?.toISOString() ?? null,
+      deliveredAt: DateTimeUtil.toISOString(notification.DeliveredAt),
+      readAt: DateTimeUtil.toISOStringOrNull(notification.ReadAt),
       isRead: notification.IsRead,
-      createdAt: notification.CreatedAt.toISOString(),
+      createdAt: DateTimeUtil.toISOString(notification.CreatedAt),
       scheduledNotification: schedule
         ? {
             id: schedule.Id.toString(),
@@ -195,14 +192,14 @@ export class ScheduledNotificationService {
             title: schedule.Title,
             message: schedule.Message,
             status: schedule.Status,
-            scheduledAt: schedule.ScheduledAt.toISOString(),
-            sentAt: schedule.SentAt?.toISOString() ?? null,
-            deliveredAt: schedule.DeliveredAt?.toISOString() ?? null,
-            failedAt: schedule.FailedAt?.toISOString() ?? null,
+            scheduledAt: DateTimeUtil.toISOString(schedule.ScheduledAt),
+            sentAt: DateTimeUtil.toISOStringOrNull(schedule.SentAt),
+            deliveredAt: DateTimeUtil.toISOStringOrNull(schedule.DeliveredAt),
+            failedAt: DateTimeUtil.toISOStringOrNull(schedule.FailedAt),
             retryCount: schedule.RetryCount,
             errorMessage: schedule.ErrorMessage,
-            createdAt: schedule.CreatedAt.toISOString(),
-            updatedAt: schedule.UpdatedAt?.toISOString() ?? null,
+            createdAt: DateTimeUtil.toISOString(schedule.CreatedAt),
+            updatedAt: DateTimeUtil.toISOStringOrNull(schedule.UpdatedAt),
           }
         : null,
     };
@@ -213,7 +210,7 @@ export class ScheduledNotificationService {
    * Near-term scheduledAt values are published immediately; future times use scheduleMessages.
    */
   async create(input: CreateScheduledNotificationBody): Promise<ScheduledNotificationResponseDto> {
-    const userId = BigInt(input.userId);
+    const userId = DataConversionUtil.parseBigIntOrThrow(input.userId);
 
     if (!config.NOTIFICATION_QUEUE_NAME) {
       throw new ValidationError('NOTIFICATION_QUEUE_NAME is not configured');
@@ -226,7 +223,9 @@ export class ScheduledNotificationService {
     }
 
     const childReminderId =
-      input.childReminderId !== undefined ? BigInt(input.childReminderId) : undefined;
+      input.childReminderId !== undefined
+        ? DataConversionUtil.parseBigIntOrThrow(input.childReminderId)
+        : undefined;
 
     const row = await this.createInternal({
       userId,
@@ -274,7 +273,7 @@ export class ScheduledNotificationService {
     });
 
     const payload: NotificationDispatchPayload = {
-      module: 'notification',
+      module: NOTIFICATION_MODULE,
       eventType: NotificationEventTypes.SCHEDULED,
       userId: input.userId.toString(),
       title: input.title,
@@ -292,7 +291,7 @@ export class ScheduledNotificationService {
         ...(input.screen ? { screen: input.screen } : {}),
       },
       metadata: {
-        scheduledFor: enqueueAt.toISOString(),
+        scheduledFor: DateTimeUtil.toISOString(enqueueAt),
         ...(input.clientEventId ? { clientEventId: input.clientEventId } : {}),
         ...(input.screen ? { screen: input.screen } : {}),
       },
@@ -357,8 +356,8 @@ export class ScheduledNotificationService {
         childReminderId: input.childReminderId?.toString(),
         notificationType: input.notificationType,
         azureMessageId,
-        scheduledAt: input.scheduledAt.toISOString(),
-        enqueueAt: enqueueAt.toISOString(),
+        scheduledAt: DateTimeUtil.toISOString(input.scheduledAt),
+        enqueueAt: DateTimeUtil.toISOString(enqueueAt),
         deliverImmediately,
         queueName,
       },
@@ -374,11 +373,9 @@ export class ScheduledNotificationService {
    * Cancels a single scheduled notification and its Azure sequence when present.
    */
   async cancel(id: string): Promise<ScheduledNotificationResponseDto> {
-    let parsedId: bigint;
+    const parsedId = DataConversionUtil.parseBigInt(id);
 
-    try {
-      parsedId = BigInt(id);
-    } catch {
+    if (parsedId === null) {
       throw new ValidationError('Scheduled notification id is invalid');
     }
 
@@ -416,11 +413,9 @@ export class ScheduledNotificationService {
    * Cancels all active schedules for a child reminder.
    */
   async cancelByChildReminder(childReminderId: string): Promise<{ cancelledCount: number }> {
-    let parsedChildReminderId: bigint;
+    const parsedChildReminderId = DataConversionUtil.parseBigInt(childReminderId);
 
-    try {
-      parsedChildReminderId = BigInt(childReminderId);
-    } catch {
+    if (parsedChildReminderId === null) {
       throw new ValidationError('Child reminder id is invalid');
     }
 
@@ -439,6 +434,35 @@ export class ScheduledNotificationService {
         cancelledCount,
       },
       'child reminder schedules cancelled',
+    );
+
+    return { cancelledCount };
+  }
+
+  /**
+   * Cancels all active schedules for a user.
+   */
+  async cancelByUser(userId: string): Promise<{ cancelledCount: number }> {
+    const parsedUserId = DataConversionUtil.parseBigInt(userId);
+
+    if (parsedUserId === null) {
+      throw new ValidationError('User id is invalid');
+    }
+
+    const activeSchedules = await this.#repository.findActiveByUserId(parsedUserId);
+
+    for (const schedule of activeSchedules) {
+      await this.#cancelAzureSchedule(schedule.AzureMessageId);
+    }
+
+    const cancelledCount = await this.#repository.cancelByUserId(parsedUserId);
+
+    logger.info(
+      {
+        userId: parsedUserId.toString(),
+        cancelledCount,
+      },
+      'user schedules cancelled',
     );
 
     return { cancelledCount };
@@ -502,14 +526,14 @@ export class ScheduledNotificationService {
       message: row.Message,
       status: row.Status,
       azureMessageId: row.AzureMessageId,
-      scheduledAt: row.ScheduledAt.toISOString(),
-      sentAt: row.SentAt?.toISOString() ?? null,
-      deliveredAt: row.DeliveredAt?.toISOString() ?? null,
-      failedAt: row.FailedAt?.toISOString() ?? null,
+      scheduledAt: DateTimeUtil.toISOString(row.ScheduledAt),
+      sentAt: DateTimeUtil.toISOStringOrNull(row.SentAt),
+      deliveredAt: DateTimeUtil.toISOStringOrNull(row.DeliveredAt),
+      failedAt: DateTimeUtil.toISOStringOrNull(row.FailedAt),
       retryCount: row.RetryCount,
       errorMessage: row.ErrorMessage,
-      createdAt: row.CreatedAt.toISOString(),
-      updatedAt: row.UpdatedAt?.toISOString() ?? null,
+      createdAt: DateTimeUtil.toISOString(row.CreatedAt),
+      updatedAt: DateTimeUtil.toISOStringOrNull(row.UpdatedAt),
     };
   }
 }

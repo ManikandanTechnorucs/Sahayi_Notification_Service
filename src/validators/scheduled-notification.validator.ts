@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { VALIDATION_LIMITS } from '../constants/validation.constants';
 
 /**
  * Normalizes alternate payload keys (userID → userId).
@@ -32,15 +33,18 @@ export const createScheduledNotificationSchema = {
           .string()
           .trim()
           .min(1, 'title is required')
-          .max(200, 'title must be at most 200 characters'),
+          .max(VALIDATION_LIMITS.TITLE_MAX, `title must be at most ${VALIDATION_LIMITS.TITLE_MAX} characters`),
         message: z
           .string()
           .trim()
           .min(1, 'message is required')
-          .max(1000, 'message must be at most 1000 characters'),
-        scheduledAt: z.coerce.date().refine((value) => value.getTime() >= Date.now() - 5000, {
-          message: 'scheduledAt must not be more than 5 seconds in the past',
-        }),
+          .max(VALIDATION_LIMITS.MESSAGE_MAX, `message must be at most ${VALIDATION_LIMITS.MESSAGE_MAX} characters`),
+        scheduledAt: z.coerce.date().refine(
+          (value) => value.getTime() >= Date.now() - VALIDATION_LIMITS.SCHEDULED_AT_PAST_TOLERANCE_MS,
+          {
+            message: 'scheduledAt must not be more than 5 seconds in the past',
+          },
+        ),
         childReminderId: z.coerce
           .number()
           .int()
@@ -50,19 +54,31 @@ export const createScheduledNotificationSchema = {
           .string()
           .trim()
           .min(1, 'notificationType must not be empty')
-          .max(50, 'notificationType must be at most 50 characters')
+          .max(
+            VALIDATION_LIMITS.NOTIFICATION_TYPE_MAX,
+            `notificationType must be at most ${VALIDATION_LIMITS.NOTIFICATION_TYPE_MAX} characters`,
+          )
           .optional(),
         clientEventId: z
           .string()
           .trim()
-          .min(8, 'clientEventId must be at least 8 characters')
-          .max(64, 'clientEventId must be at most 64 characters')
+          .min(
+            VALIDATION_LIMITS.CLIENT_EVENT_ID_MIN,
+            `clientEventId must be at least ${VALIDATION_LIMITS.CLIENT_EVENT_ID_MIN} characters`,
+          )
+          .max(
+            VALIDATION_LIMITS.CLIENT_EVENT_ID_MAX,
+            `clientEventId must be at most ${VALIDATION_LIMITS.CLIENT_EVENT_ID_MAX} characters`,
+          )
           .optional(),
         screen: z
           .string()
           .trim()
           .min(1, 'screen must not be empty')
-          .max(100, 'screen must be at most 100 characters')
+          .max(
+            VALIDATION_LIMITS.SCREEN_MAX,
+            `screen must be at most ${VALIDATION_LIMITS.SCREEN_MAX} characters`,
+          )
           .optional(),
       })
       .strict(),
@@ -84,7 +100,10 @@ export const getDeliveredNotificationsQuerySchema = {
         .number()
         .int('limit must be an integer')
         .positive('limit must be a positive integer')
-        .max(30, 'limit must be at most 30')
+        .max(
+          VALIDATION_LIMITS.DELIVERED_LIST_LIMIT_MAX,
+          `limit must be at most ${VALIDATION_LIMITS.DELIVERED_LIST_LIMIT_MAX}`,
+        )
         .default(30),
     })
     .strict(),
@@ -103,7 +122,10 @@ export const bulkMarkDeliveredReadSchema = {
           }),
         )
         .min(1, 'ids must contain at least one id')
-        .max(100, 'ids must contain at most 100 items'),
+        .max(
+          VALIDATION_LIMITS.BULK_READ_IDS_MAX,
+          `ids must contain at most ${VALIDATION_LIMITS.BULK_READ_IDS_MAX} items`,
+        ),
     })
     .strict(),
 };
@@ -131,6 +153,20 @@ export const cancelByChildReminderParamsSchema = {
         .regex(/^\d+$/, 'childReminderId must be a positive integer')
         .refine((value) => BigInt(value) > 0n, {
           message: 'childReminderId must be a positive integer',
+        }),
+    })
+    .strict(),
+};
+
+export const cancelByUserParamsSchema = {
+  params: z
+    .object({
+      userId: z
+        .string()
+        .trim()
+        .regex(/^\d+$/, 'userId must be a positive integer')
+        .refine((value) => BigInt(value) > 0n, {
+          message: 'userId must be a positive integer',
         }),
     })
     .strict(),

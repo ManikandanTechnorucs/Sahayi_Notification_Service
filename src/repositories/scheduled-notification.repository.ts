@@ -2,16 +2,23 @@ import { prisma } from '../../libs/db/src/prisma';
 import type {
   DeliveredNotification,
   ScheduledNotification,
-  ScheduledNotificationStatus,
+  ScheduledNotificationStatus as ScheduledNotificationStatusType,
 } from '../../generated/prisma/client';
-import { REMINDER_NOTIFICATION_TYPE_VALUES, ACTIVE_SCHEDULE_STATUSES } from '../constants/reminder-notification.constants';
+import {
+  REMINDER_NOTIFICATION_TYPE_VALUES,
+  ACTIVE_SCHEDULE_STATUSES,
+} from '../constants/reminder-notification.constants';
+import {
+  ERROR_MESSAGE_MAX_LENGTH,
+  ScheduledNotificationStatus,
+} from '../constants/scheduled-notification.constants';
 
 export type CreateScheduledNotificationRecord = {
   userId: bigint;
   title: string;
   message: string;
   scheduledAt: Date;
-  status: ScheduledNotificationStatus;
+  status: ScheduledNotificationStatusType;
   deviceToken?: string | null;
   childReminderId?: bigint | null;
   notificationType?: string | null;
@@ -26,7 +33,7 @@ export type PaginatedDeliveredNotifications = {
   total: number;
 };
 
-const ACTIVE_STATUSES: ScheduledNotificationStatus[] = [
+const ACTIVE_STATUSES: ScheduledNotificationStatusType[] = [
   ...ACTIVE_SCHEDULE_STATUSES,
 ];
 
@@ -173,7 +180,7 @@ export class ScheduledNotificationRepository {
     return prisma.scheduledNotification.update({
       where: { Id: id },
       data: {
-        Status: 'CANCELLED',
+        Status: ScheduledNotificationStatus.CANCELLED,
         UpdatedAt: new Date(),
       },
     });
@@ -189,7 +196,38 @@ export class ScheduledNotificationRepository {
         Status: { in: ACTIVE_STATUSES },
       },
       data: {
-        Status: 'CANCELLED',
+        Status: ScheduledNotificationStatus.CANCELLED,
+        UpdatedAt: new Date(),
+      },
+    });
+
+    return result.count;
+  }
+
+  /**
+   * Loads active schedules for a user.
+   */
+  async findActiveByUserId(userId: bigint): Promise<ScheduledNotification[]> {
+    return prisma.scheduledNotification.findMany({
+      where: {
+        UserId: userId,
+        Status: { in: ACTIVE_STATUSES },
+      },
+      orderBy: { CreatedAt: 'desc' },
+    });
+  }
+
+  /**
+   * Marks all active schedules for a user as CANCELLED.
+   */
+  async cancelByUserId(userId: bigint): Promise<number> {
+    const result = await prisma.scheduledNotification.updateMany({
+      where: {
+        UserId: userId,
+        Status: { in: ACTIVE_STATUSES },
+      },
+      data: {
+        Status: ScheduledNotificationStatus.CANCELLED,
         UpdatedAt: new Date(),
       },
     });
@@ -204,9 +242,9 @@ export class ScheduledNotificationRepository {
     return prisma.scheduledNotification.update({
       where: { Id: id },
       data: {
-        Status: 'FAILED',
+        Status: ScheduledNotificationStatus.FAILED,
         FailedAt: new Date(),
-        ErrorMessage: errorMessage.slice(0, 1000),
+        ErrorMessage: errorMessage.slice(0, ERROR_MESSAGE_MAX_LENGTH),
         UpdatedAt: new Date(),
       },
     });

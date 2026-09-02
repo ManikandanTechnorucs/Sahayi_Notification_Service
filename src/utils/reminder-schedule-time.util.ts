@@ -3,6 +3,8 @@
  * Fire times are absolute UTC instants — no hardcoded regional timezone.
  */
 
+import { REMINDER_SYNC_FIRE_WINDOW } from '../constants/validation.constants';
+
 /**
  * Combines a stored UTC DATE and UTC TIME into an absolute fire instant.
  */
@@ -21,8 +23,8 @@ export function combineReminderDateAndTime(reminderDate: Date, reminderTime: Dat
 
 export function getUtcFireWindow(
   reference: Date = new Date(),
-  lookBehindMs = 60 * 60 * 1000,
-  lookAheadMs = 36 * 60 * 60 * 1000,
+  lookBehindMs = REMINDER_SYNC_FIRE_WINDOW.LOOK_BEHIND_MS,
+  lookAheadMs = REMINDER_SYNC_FIRE_WINDOW.LOOK_AHEAD_MS,
 ): { windowStart: Date; windowEnd: Date } {
   return {
     windowStart: new Date(reference.getTime() - lookBehindMs),
@@ -59,7 +61,10 @@ export function getUtcDatePadRange(windowStart: Date, windowEnd: Date): {
 /**
  * Ensures Azure scheduled enqueue time is slightly in the future.
  */
-export function resolveScheduledEnqueueTime(scheduledAt: Date, leadMs = 2000): Date {
+export function resolveScheduledEnqueueTime(
+  scheduledAt: Date,
+  leadMs = REMINDER_SYNC_FIRE_WINDOW.ENQUEUE_LEAD_MS,
+): Date {
   const minimum = Date.now() + leadMs;
 
   if (scheduledAt.getTime() < minimum) {

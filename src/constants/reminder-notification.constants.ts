@@ -9,10 +9,19 @@ export const REMINDER_NOTIFICATION_TYPE_VALUES = Object.values(REMINDER_NOTIFICA
 /** Caregiver fan-out after a user missed reminder. Not a user reminder phase. */
 export const CAREGIVER_REMINDER_MISSED_TYPE = 'CaregiverReminderMissed';
 
+export const REMINDER_TITLE_PREFIX = {
+  UPCOMING: 'Upcoming:',
+  MISSED: 'Missed:',
+} as const;
+
+export const NOTIFICATION_MODULE = 'notification';
+
 export type ReminderNotificationType =
   (typeof REMINDER_NOTIFICATION_TYPES)[keyof typeof REMINDER_NOTIFICATION_TYPES];
 
-export const ACTIVE_SCHEDULE_STATUSES = ['SCHEDULED', 'PROCESSING', 'FAILED'] as const;
+export {
+  ACTIVE_SCHEDULE_STATUSES,
+} from './scheduled-notification.constants';
 
 /** Phases whose fire time is more than this many ms in the past are not created during sync. */
 export const REMINDER_SYNC_PAST_PHASE_SKIP_MS = 60_000;

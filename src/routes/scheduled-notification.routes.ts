@@ -5,6 +5,7 @@ import type { ScheduledNotificationController } from '../controllers/scheduled-n
 import {
   bulkMarkDeliveredReadSchema,
   cancelByChildReminderParamsSchema,
+  cancelByUserParamsSchema,
   cancelScheduledNotificationParamsSchema,
   createScheduledNotificationSchema,
   getDeliveredNotificationsQuerySchema,
@@ -32,6 +33,13 @@ export function createScheduledNotificationRoutes(
     requireAuth,
     validate(cancelByChildReminderParamsSchema),
     controller.cancelByChildReminder,
+  );
+
+  router.delete(
+    '/by-user/:userId',
+    requireAuth,
+    validate(cancelByUserParamsSchema),
+    controller.cancelByUser,
   );
 
   router.delete(

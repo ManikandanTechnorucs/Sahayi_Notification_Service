@@ -1,2 +1,0 @@
-DATABASE_URL="mysql://sahayi_admin:sahayi%40Password_123%23.@sahayi.mysql.database.azure.com:3306/sahayi?sslaccept=strict"
-JWT_SECRET="asdkjhkjkkkh987879879879987khkas"
