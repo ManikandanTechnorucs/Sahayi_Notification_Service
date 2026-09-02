@@ -14,7 +14,25 @@ import type { AppContainer } from './utils/container';
 export function createApp(container: AppContainer) {
   const app = express();
 
-  app.use(helmet());
+  app.get('/api-docs/openapi.json', (_req, res) => {
+    res.status(200).json(openApiDocument);
+  });
+
+  app.get('/api-docs.json', (_req, res) => {
+    res.status(200).json(openApiDocument);
+  });
+
+  app.use(
+    '/api-docs',
+    swaggerUi.serve,
+    swaggerUi.setup(openApiDocument, {
+      customSiteTitle: 'Sahayi Notification Service API',
+    }),
+  );
+
+  // APIs are served over plain HTTP. Helmet defaults send HSTS and CSP
+  // upgrade-insecure-requests, which makes iOS force HTTPS and blank Swagger UI.
+  app.use(helmet({ hsts: false, contentSecurityPolicy: false }));
   app.use(cors());
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true }));
@@ -31,22 +49,6 @@ export function createApp(container: AppContainer) {
       },
     });
   });
-
-  app.get('/api-docs/openapi.json', (_req, res) => {
-    res.status(200).json(openApiDocument);
-  });
-
-  app.get('/api-docs.json', (_req, res) => {
-    res.status(200).json(openApiDocument);
-  });
-
-  app.use(
-    '/api-docs',
-    swaggerUi.serve,
-    swaggerUi.setup(openApiDocument, {
-      customSiteTitle: 'Sahayi Notification Service API',
-    }),
-  );
 
   app.use(
     '/notifications',

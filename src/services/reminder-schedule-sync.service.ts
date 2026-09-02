@@ -2,7 +2,9 @@ import { config } from '../../libs/config/src/config';
 import { logger } from '../../libs/logger/src/logger';
 import {
   CAREGIVER_REMINDER_MISSED_TYPE,
+  NOTIFICATION_MODULE,
   REMINDER_NOTIFICATION_TYPES,
+  REMINDER_TITLE_PREFIX,
   REMINDER_SYNC_PAST_PHASE_SKIP_MS,
   REMINDER_SYNC_TIME_DRIFT_MS,
   type ReminderNotificationType,
@@ -15,6 +17,7 @@ import {
   getUtcDatePadRange,
   getUtcFireWindow,
 } from '../utils/reminder-schedule-time.util';
+import { DateTimeUtil } from '../utils/datetime.util';
 import type { ScheduledNotification } from '../../generated/prisma/client';
 
 type DesiredSchedule = {
@@ -162,11 +165,13 @@ export class ReminderScheduleSyncService {
           createdCount,
           cancelledCount,
           rescheduledCount,
-          dayStart: dayStart.toISOString(),
-          dayEnd: dayEnd.toISOString(),
-          windowStart: windowStart.toISOString(),
-          windowEnd: windowEnd.toISOString(),
-          sampleFireAt: desiredSchedules[0]?.scheduledAt.toISOString(),
+          dayStart: DateTimeUtil.toISOString(dayStart),
+          dayEnd: DateTimeUtil.toISOString(dayEnd),
+          windowStart: DateTimeUtil.toISOString(windowStart),
+          windowEnd: DateTimeUtil.toISOString(windowEnd),
+          sampleFireAt: desiredSchedules[0]
+            ? DateTimeUtil.toISOString(desiredSchedules[0].scheduledAt)
+            : undefined,
         },
         'reminder schedule sync completed',
       );
@@ -201,7 +206,7 @@ export class ReminderScheduleSyncService {
             fireAt.getTime() - config.REMINDER_BEFORE_OFFSET_MINUTES * 60_000,
           ),
           alreadySent: child.beforeNotificationSent,
-          title: `Upcoming: ${child.title}`,
+          title: `${REMINDER_TITLE_PREFIX.UPCOMING} ${child.title}`,
           message: body,
         },
         {
@@ -217,7 +222,7 @@ export class ReminderScheduleSyncService {
             fireAt.getTime() + config.REMINDER_AFTER_OFFSET_MINUTES * 60_000,
           ),
           alreadySent: child.afterNotificationSent,
-          title: `Missed: ${child.title}`,
+          title: `${REMINDER_TITLE_PREFIX.MISSED} ${child.title}`,
           message: body,
         },
       ];

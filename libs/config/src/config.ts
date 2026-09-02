@@ -106,7 +106,4 @@ export const config = {
     .split(',')
     .map((c) => c.trim())
     .filter((c) => c.length > 0) as Array<'push' | 'email' | 'sms' | 'in_app'>,
-  FCM_ENABLED: getOptionalEnv('FCM_ENABLED') === 'true',
-  FCM_PROJECT_ID: getOptionalEnv('FCM_PROJECT_ID'),
-  FCM_SERVICE_ACCOUNT_PATH: getOptionalEnv('FCM_SERVICE_ACCOUNT_PATH'),
 };

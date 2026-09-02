@@ -102,6 +102,12 @@ enum FallAlertDeliveryStatus {
   SKIPPED_DUPLICATE
 }
 
+enum WeeklySummarySendStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
 // -----------------------------------------------------------------------------
 // MASTER / LOOKUP TABLES
 // -----------------------------------------------------------------------------
@@ -116,6 +122,13 @@ model rolesmaster {
   UpdatedAt DateTime? @db.DateTime(0)
 
   users users[]
+}
+
+model weeklyfamilysummarysettings {
+  Id            Int       @id @default(1)
+  SendDayOfWeek Int       @default(1)
+  SendTimeUtc   DateTime  @db.Time(0)
+  UpdatedAt     DateTime? @db.DateTime(0)
 }
 
 model subscriptionmaster {
@@ -248,7 +261,7 @@ model users {
   AIVoiceId   Int?
 
   Name         String  @db.VarChar(150)
-  MobileNumber String  @unique(map: "UX_Users_MobileNumber") @db.VarChar(20)
+  MobileNumber String  @unique(map: "UX_Users_MobileNumber") @db.VarChar(50)
   Email        String? @db.VarChar(200)
 
   ProfileImage   String? @db.VarChar(1000)
@@ -268,6 +281,12 @@ model users {
   Platform users_Platform?
 
   IsActive Boolean @default(true)
+
+  IsDeleted      Boolean   @default(false)
+  DeletedAt      DateTime? @db.DateTime(0)
+  IsOnBreak      Boolean   @default(false)
+  BreakStartedAt DateTime? @db.DateTime(0)
+  BreakEndsAt    DateTime? @db.DateTime(0)
 
   CreatedAt DateTime  @default(now()) @db.DateTime(0)
   UpdatedAt DateTime? @db.DateTime(0)
@@ -293,6 +312,8 @@ model users {
   DeliveredNotifications DeliveredNotification[]
   FallDetectionEvents    FallDetectionEvent[]
   UserAIUsage            UserAIUsage[]
+  KnowMeUserResponses    KnowMeUserResponse[]
+  weeklysummarysendlog   weeklysummarysendlog[]
 
   // Relationship requests (sent / received)
   SentRelationshipRequests     userrelationshiprequest[] @relation("RequestFromUser")
@@ -324,7 +345,28 @@ model FamilyMembers {
   CreatedAt DateTime @default(now())
   UpdatedAt DateTime @updatedAt
 
+  weeklysummarysendlog weeklysummarysendlog[]
+
   @@index([userId])
+}
+
+model weeklysummarysendlog {
+  Id                BigInt                  @id @default(autoincrement())
+  UserId            BigInt
+  FamilyMemberId    BigInt
+  ReportPeriodStart DateTime                @db.Date
+  ReportPeriodEnd   DateTime                @db.Date
+  SentAt            DateTime?               @db.DateTime(0)
+  Status            WeeklySummarySendStatus @default(PENDING)
+  ErrorMessage      String?                 @db.VarChar(500)
+  CreatedAt         DateTime                @default(now()) @db.DateTime(0)
+
+  users         users         @relation(fields: [UserId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_WeeklySummarySendLog_User")
+  familyMembers FamilyMembers @relation(fields: [FamilyMemberId], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "FK_WeeklySummarySendLog_FamilyMember")
+
+  @@unique([UserId, FamilyMemberId, ReportPeriodStart, ReportPeriodEnd], map: "UX_WeeklySummarySend_Period")
+  @@index([Status], map: "IX_WeeklySummarySendLog_Status")
+  @@index([SentAt], map: "IX_WeeklySummarySendLog_SentAt")
 }
 
 model EmergencyContacts {
@@ -741,6 +783,56 @@ model FallAlertDelivery {
 
   @@index([FallEventId], map: "IX_FallAlertDelivery_FallEventId")
   @@index([Status], map: "IX_FallAlertDelivery_Status")
+}
+
+// -----------------------------------------------------------------------------
+// KNOW ME
+// -----------------------------------------------------------------------------
+
+model KnowMeCategory {
+  Id           BigInt    @id @default(autoincrement())
+  Name         String    @db.VarChar(150)
+  Description  String?   @db.VarChar(500)
+  DisplayOrder Int       @default(0)
+  IsActive     Boolean   @default(true)
+  IsDeleted    Boolean   @default(false)
+  CreatedAt    DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt    DateTime? @db.DateTime(0)
+
+  questions KnowMeQuestion[]
+
+  @@index([IsActive, IsDeleted, DisplayOrder], map: "IX_KnowMeCategory_Active_Deleted_Order")
+}
+
+model KnowMeQuestion {
+  Id           BigInt    @id @default(autoincrement())
+  CategoryId   BigInt
+  QuestionText String    @db.VarChar(500)
+  DisplayOrder Int       @default(0)
+  IsActive     Boolean   @default(true)
+  IsDeleted    Boolean   @default(false)
+  CreatedAt    DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt    DateTime? @db.DateTime(0)
+
+  category  KnowMeCategory       @relation(fields: [CategoryId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_KnowMeQuestion_Category")
+  responses KnowMeUserResponse[]
+
+  @@index([CategoryId, IsActive, IsDeleted, DisplayOrder], map: "IX_KnowMeQuestion_Category_Active_Deleted_Order")
+}
+
+model KnowMeUserResponse {
+  Id         BigInt    @id @default(autoincrement())
+  UserId     BigInt
+  QuestionId BigInt
+  Answer     String    @db.Text
+  CreatedAt  DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt  DateTime? @db.DateTime(0)
+
+  users    users          @relation(fields: [UserId], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "FK_KnowMeUserResponse_User")
+  question KnowMeQuestion @relation(fields: [QuestionId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_KnowMeUserResponse_Question")
+
+  @@unique([UserId, QuestionId], map: "UX_KnowMeUserResponse_User_Question")
+  @@index([UserId], map: "IX_KnowMeUserResponse_User")
 }
 
 // -----------------------------------------------------------------------------

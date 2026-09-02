@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { MessagingValidationError } from '../errors/messaging.errors';
 import type { MessageEnvelope } from '../types/message-envelope';
+import { DateTimeUtil } from '../../../../src/utils/datetime.util';
 
 const envelopeSchema = z.object({
   messageId: z.string().min(1),
@@ -60,7 +61,7 @@ export function buildMessageEnvelope<TPayload>(input: {
     eventType: input.eventType,
     queueName: input.queueName,
     payload: input.payload,
-    createdAt: new Date().toISOString(),
+    createdAt: DateTimeUtil.toISOString(DateTimeUtil.now()),
     sourceSystem: input.sourceSystem,
     retryCount: input.retryCount ?? 0,
   };
@@ -70,7 +71,7 @@ export function buildMessageEnvelope<TPayload>(input: {
   }
 
   if (input.scheduledAt !== undefined) {
-    envelope.scheduledAt = input.scheduledAt.toISOString();
+    envelope.scheduledAt = DateTimeUtil.toISOString(input.scheduledAt);
   }
 
   return envelope;

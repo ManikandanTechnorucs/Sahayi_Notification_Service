@@ -16,6 +16,10 @@ type CancelByChildReminderParams = {
   childReminderId: string;
 };
 
+type CancelByUserParams = {
+  userId: string;
+};
+
 /**
  * HTTP handlers for scheduled notifications.
  */
@@ -35,6 +39,7 @@ export class ScheduledNotificationController {
     this.getUnreadDeliveredCount = this.getUnreadDeliveredCount.bind(this);
     this.cancel = this.cancel.bind(this);
     this.cancelByChildReminder = this.cancelByChildReminder.bind(this);
+    this.cancelByUser = this.cancelByUser.bind(this);
     this.syncTodayReminders = this.syncTodayReminders.bind(this);
   }
 
@@ -191,6 +196,24 @@ export class ScheduledNotificationController {
     try {
       const { childReminderId } = req.params as CancelByChildReminderParams;
       const data = await this.#service.cancelByChildReminder(childReminderId);
+
+      res.status(200).json({
+        ...response.DATA_DELETED_SUCCESSFULLY,
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * DELETE /notifications/by-user/:userId
+   * Cancels all active schedules for a user.
+   */
+  async cancelByUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { userId } = req.params as CancelByUserParams;
+      const data = await this.#service.cancelByUser(userId);
 
       res.status(200).json({
         ...response.DATA_DELETED_SUCCESSFULLY,
