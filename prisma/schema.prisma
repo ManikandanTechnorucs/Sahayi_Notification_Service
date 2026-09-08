@@ -56,6 +56,29 @@ enum UserAIUsageType {
   AI_VOICE
 }
 
+enum SubscriptionLimitMode {
+  LIMITED
+  UNLIMITED
+}
+
+enum SubscriptionDashboardLevel {
+  NONE
+  BASIC
+  ADVANCED
+}
+
+enum SubscriptionNotificationLevel {
+  CRITICAL
+  STANDARD
+  ADVANCED
+}
+
+enum SubscriptionReportLevel {
+  NONE
+  STANDARD
+  ADVANCED
+}
+
 enum ScheduledNotificationStatus {
   SCHEDULED
   PROCESSING
@@ -139,10 +162,10 @@ model subscriptionmaster {
   MonthlyCost   String    @db.VarChar(10)
   yearlyCost    String    @db.VarChar(10)
 
-  FamilyMembersLimit      Int
-  EmergencyContactsLimit  Int
-  CaregiverConnection     Int
-  CaretakerConnection     Int
+  FamilyMembersLimit      Int?
+  EmergencyContactsLimit  Int?
+  CaregiverConnection     Int?
+  CaretakerConnection     Int?
   RemindersLimit          String     @db.VarChar(10)
   EmergencySOSalert       Boolean
   WearableIntegration     Boolean
@@ -153,11 +176,31 @@ model subscriptionmaster {
   AITextLimit     String?     @db.VarChar(50)
   AIVoiceLimit     String?     @db.VarChar(50)
 
+  MultiLanguageSupport Boolean @default(false)
+  AITextMode           SubscriptionLimitMode @default(LIMITED)
+  AITextDailyLimit     Int?
+  AIVoiceMode          SubscriptionLimitMode @default(LIMITED)
+  AIVoiceDailyLimit    Int?
+  RemindersMode        SubscriptionLimitMode @default(LIMITED)
+  RemindersDailyLimit  Int?
+  FamilyMembersMode    SubscriptionLimitMode @default(LIMITED)
+  EmergencyContactsMode SubscriptionLimitMode @default(LIMITED)
+  CaregiverMode        SubscriptionLimitMode @default(LIMITED)
+  CareRecipientsMode   SubscriptionLimitMode @default(LIMITED)
+  CareRecipientsDashboard SubscriptionDashboardLevel @default(BASIC)
+  NotificationsAlerts  SubscriptionNotificationLevel @default(STANDARD)
+  HealthReportsExport  SubscriptionReportLevel @default(NONE)
+  WeeklySummaryReport  SubscriptionReportLevel @default(STANDARD)
+  AdFreeExperience     Boolean @default(false)
+  FallDetection        Boolean @default(false)
+  JournalAccess        Boolean @default(false)
+
   IsActive  Boolean   @default(true)
   CreatedAt DateTime  @default(now()) @db.DateTime(0)
   UpdatedAt DateTime? @db.DateTime(0)
 
-  users users[]
+  users            users[]
+  allowedLanguages subscriptionallowedlanguage[]
 }
 
 model aitextmaster {
@@ -168,7 +211,19 @@ model aitextmaster {
   CreatedAt DateTime  @default(now()) @db.DateTime(0)
   UpdatedAt DateTime? @db.DateTime(0)
 
-  users users[]
+  users                        users[]
+  subscriptionAllowedLanguages subscriptionallowedlanguage[]
+}
+
+model subscriptionallowedlanguage {
+  SubscriptionId Int
+  AITextId       Int
+
+  subscriptionmaster subscriptionmaster @relation(fields: [SubscriptionId], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "FK_SubAllowedLang_Subscription")
+  aitextmaster       aitextmaster       @relation(fields: [AITextId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_SubAllowedLang_AIText")
+
+  @@id([SubscriptionId, AITextId], map: "PK_SubscriptionAllowedLanguage")
+  @@index([AITextId], map: "IX_SubAllowedLang_AITextId")
 }
 
 model aivoicemaster {
@@ -312,6 +367,7 @@ model users {
   DeliveredNotifications DeliveredNotification[]
   FallDetectionEvents    FallDetectionEvent[]
   UserAIUsage            UserAIUsage[]
+  UserAITextUsage        UserAITextUsage[]
   KnowMeUserResponses    KnowMeUserResponse[]
   weeklysummarysendlog   weeklysummarysendlog[]
 
@@ -805,14 +861,15 @@ model KnowMeCategory {
 }
 
 model KnowMeQuestion {
-  Id           BigInt    @id @default(autoincrement())
-  CategoryId   BigInt
-  QuestionText String    @db.VarChar(500)
-  DisplayOrder Int       @default(0)
-  IsActive     Boolean   @default(true)
-  IsDeleted    Boolean   @default(false)
-  CreatedAt    DateTime  @default(now()) @db.DateTime(0)
-  UpdatedAt    DateTime? @db.DateTime(0)
+  Id                 BigInt    @id @default(autoincrement())
+  CategoryId         BigInt
+  QuestionText       String    @db.VarChar(500)
+  DisplayOrder       Int       @default(0)
+  InitialOnboarding  Boolean   @default(false)
+  IsActive           Boolean   @default(true)
+  IsDeleted          Boolean   @default(false)
+  CreatedAt          DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt          DateTime? @db.DateTime(0)
 
   category  KnowMeCategory       @relation(fields: [CategoryId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_KnowMeQuestion_Category")
   responses KnowMeUserResponse[]
@@ -857,4 +914,19 @@ model UserAIUsage {
   @@index([SessionId], map: "IX_UserAIUsage_SessionId")
   @@index([Type], map: "IX_UserAIUsage_Type")
   @@index([CreatedAt], map: "IX_UserAIUsage_CreatedAt")
+}
+
+/// Tracks AI text chat message counts per user local calendar day.
+model UserAITextUsage {
+  Id        BigInt    @id @default(autoincrement())
+  UserId    BigInt
+  LocalDate DateTime  @db.Date
+  Count     Int       @default(0)
+  CreatedAt DateTime  @default(now()) @db.DateTime(0)
+  UpdatedAt DateTime? @updatedAt @db.DateTime(0)
+
+  users users @relation(fields: [UserId], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "FK_UserAITextUsage_User")
+
+  @@unique([UserId, LocalDate], map: "UX_UserAITextUsage_User_LocalDate")
+  @@index([UserId], map: "IX_UserAITextUsage_UserId")
 }
