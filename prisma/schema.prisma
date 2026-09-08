@@ -222,7 +222,7 @@ model subscriptionallowedlanguage {
   subscriptionmaster subscriptionmaster @relation(fields: [SubscriptionId], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "FK_SubAllowedLang_Subscription")
   aitextmaster       aitextmaster       @relation(fields: [AITextId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_SubAllowedLang_AIText")
 
-  @@id([SubscriptionId, AITextId], map: "PK_SubscriptionAllowedLanguage")
+  @@id([SubscriptionId, AITextId])
   @@index([AITextId], map: "IX_SubAllowedLang_AITextId")
 }
 
