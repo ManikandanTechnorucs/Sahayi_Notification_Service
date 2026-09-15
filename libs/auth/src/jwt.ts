@@ -5,6 +5,7 @@ export type AuthTokenPayload = {
   id: string;
   role: string;
   purpose?: 'access' | 'otp_verification';
+  sv?: number;
 };
 
 /**

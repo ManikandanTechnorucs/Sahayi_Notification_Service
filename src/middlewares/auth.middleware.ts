@@ -2,6 +2,10 @@ import type { NextFunction, Request, Response } from 'express';
 import { verifyToken, type AuthTokenPayload } from '../../libs/auth/src/jwt';
 import { response } from '../../libs/response/src/response';
 import { UnauthorizedError } from '../errors/app-error';
+import {
+  assertCurrentSession,
+  readAccessTokenSessionVersion,
+} from '../utils/assert-session-version.util';
 
 export type AuthenticatedRequest = Request & {
   user?: AuthTokenPayload;
@@ -10,7 +14,11 @@ export type AuthenticatedRequest = Request & {
 /**
  * Requires a valid Bearer JWT on the Authorization header.
  */
-export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+export async function requireAuth(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   try {
     const header = req.headers.authorization;
 
@@ -44,10 +52,16 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
       return;
     }
 
+    await assertCurrentSession(
+      String(payload.id),
+      readAccessTokenSessionVersion(payload),
+    );
+
     req.user = {
       id: String(payload.id),
       role: String(payload.role),
       ...(payload.purpose ? { purpose: payload.purpose } : {}),
+      ...(typeof payload.sv === 'number' ? { sv: payload.sv } : {}),
     };
 
     next();
