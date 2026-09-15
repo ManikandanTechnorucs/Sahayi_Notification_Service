@@ -248,6 +248,7 @@ model categoriesmaster {
   UpdatedAt     DateTime? @db.DateTime(0)
 
   masterreminder masterreminder[]
+  childreminder  childreminder[]
 }
 
 model frequencymaster {
@@ -343,6 +344,10 @@ model users {
   BreakStartedAt DateTime? @db.DateTime(0)
   BreakEndsAt    DateTime? @db.DateTime(0)
 
+  SessionVersion           Int       @default(1)
+  LastActiveAt             DateTime? @db.DateTime(0)
+  LastInactivityNotifiedAt DateTime? @db.DateTime(0)
+
   CreatedAt DateTime  @default(now()) @db.DateTime(0)
   UpdatedAt DateTime? @db.DateTime(0)
 
@@ -379,6 +384,7 @@ model users {
   @@index([SubscriptionId], map: "IX_Users_SubscriptionId")
   @@index([AITextId], map: "IX_Users_AITextId")
   @@index([AIVoiceId], map: "IX_Users_AIVoiceId")
+  @@index([IsActive, IsDeleted, IsOnBreak, LastActiveAt], map: "IX_Users_LastActive_Inactivity")
 }
 
 
@@ -524,6 +530,9 @@ model childreminder {
   ReminderDate     DateTime @db.Date
   ReminderTime     DateTime @db.Time(0)
   StatusId         Int
+  Title            String   @db.VarChar(200)
+  Note             String?  @db.VarChar(500)
+  CategoryId       BigInt
 
   BeforeNotificationSent Boolean @default(false)
   OnTimeNotificationSent Boolean @default(false)
@@ -535,6 +544,7 @@ model childreminder {
   UpdatedAt   DateTime? @db.DateTime(0)
 
   masterreminder         masterreminder                      @relation(fields: [MasterReminderId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_ChildReminder_Master")
+  categoriesmaster       categoriesmaster                    @relation(fields: [CategoryId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_ChildReminder_Category")
   statusmaster           statusmaster                        @relation(fields: [StatusId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_ChildReminder_Status")
   notificationschedule   childremindernotificationschedule[]
   scheduledNotifications ScheduledNotification[]
@@ -543,6 +553,7 @@ model childreminder {
   @@index([MasterReminderId], map: "IX_ChildReminder_MasterReminderId")
   @@index([ReminderDate], map: "IX_ChildReminder_ReminderDate")
   @@index([StatusId], map: "IX_ChildReminder_StatusId")
+  @@index([CategoryId], map: "IX_ChildReminder_CategoryId")
 }
 
 model childremindernotificationschedule {
@@ -738,8 +749,9 @@ model ScheduledNotification {
   UserId           BigInt
   ChildReminderId  BigInt?
   NotificationType String?                       @db.VarChar(50)
-  DeviceToken      String?                       @db.VarChar(500)
-  Title            String                        @db.VarChar(200)
+  DeviceToken          String? @db.VarChar(500)
+  NotificationAudioUrl String? @db.VarChar(2000)
+  Title                String  @db.VarChar(200)
   Message          String                        @db.VarChar(1000)
   Status           ScheduledNotificationStatus
   AzureMessageId   String?                       @db.VarChar(200)

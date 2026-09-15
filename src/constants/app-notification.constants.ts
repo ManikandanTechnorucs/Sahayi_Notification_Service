@@ -14,6 +14,7 @@ export const APP_NOTIFICATION_TYPES = {
   FALL_DETECTED: 'FallDetected',
   FALL_EMERGENCY: 'FallEmergency',
   SOS_EMERGENCY: 'SosEmergency',
+  INACTIVITY: 'Inactivity',
 } as const;
 
 export type AppNotificationType =
