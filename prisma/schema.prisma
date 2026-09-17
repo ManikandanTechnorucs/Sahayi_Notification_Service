@@ -154,6 +154,13 @@ model weeklyfamilysummarysettings {
   UpdatedAt     DateTime? @db.DateTime(0)
 }
 
+model inactivenotificationsettings {
+  Id           Int       @id @default(1)
+  StartTimeUtc DateTime  @db.Time(0)
+  EndTimeUtc   DateTime  @db.Time(0)
+  UpdatedAt    DateTime? @db.DateTime(0)
+}
+
 model subscriptionmaster {
   Id        Int       @id @default(autoincrement())
   Name      String    @unique(map: "UX_SubscriptionMaster_Name") @db.VarChar(100)
@@ -347,6 +354,7 @@ model users {
   SessionVersion           Int       @default(1)
   LastActiveAt             DateTime? @db.DateTime(0)
   LastInactivityNotifiedAt DateTime? @db.DateTime(0)
+  NextInactivityNotifyAt   DateTime? @db.DateTime(0)
 
   CreatedAt DateTime  @default(now()) @db.DateTime(0)
   UpdatedAt DateTime? @db.DateTime(0)
@@ -718,6 +726,8 @@ model userdevicetoken {
   DeactivatedAt DateTime? @db.DateTime(0)
 
   DeactivationReason String? @db.VarChar(100)
+
+  TimeZone String? @db.VarChar(64)
 
   CreatedAt DateTime  @default(now()) @db.DateTime(0)
   UpdatedAt DateTime? @db.DateTime(0)
