@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { validate } from '../../libs/validation/src/validate';
-import { requireAuth } from '../middlewares/auth.middleware';
+import { requireAuth, requireAuthOrInternalServiceToken } from '../middlewares/auth.middleware';
 import type { ScheduledNotificationController } from '../controllers/scheduled-notification.controller';
 import {
   bulkMarkDeliveredReadSchema,
@@ -21,7 +21,7 @@ export function createScheduledNotificationRoutes(
 
   router.post(
     '/schedule-notification',
-    requireAuth,
+    requireAuthOrInternalServiceToken,
     validate(createScheduledNotificationSchema),
     controller.create,
   );

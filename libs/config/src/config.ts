@@ -108,4 +108,7 @@ export const config = {
     .filter((c) => c.length > 0) as Array<'push' | 'email' | 'sms' | 'in_app'>,
   /** Azure Application Insights / Monitor connection string (optional; telemetry disabled when unset) */
   APPLICATIONINSIGHTS_CONNECTION_STRING: getOptionalEnv('APPLICATIONINSIGHTS_CONNECTION_STRING'),
+  /** Shared secret for User Service → Notification Service SOS/Fall fan-out */
+  INTERNAL_SERVICE_TOKEN:
+    getOptionalEnv('INTERNAL_SERVICE_TOKEN') ?? 'sahayi-internal-subscription-sync',
 };
