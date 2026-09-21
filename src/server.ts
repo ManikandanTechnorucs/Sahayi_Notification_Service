@@ -1,3 +1,4 @@
+import { shutdownTelemetry } from './telemetry/azure-monitor';
 import { config } from '../libs/config/src/config';
 import { logger } from '../libs/logger/src/logger';
 import { createApp } from './app';
@@ -39,6 +40,12 @@ async function bootstrap(): Promise<void> {
         await container.messaging.shutdown();
       } catch (error) {
         logger.error({ err: error }, 'messaging shutdown failed');
+      }
+
+      try {
+        await shutdownTelemetry();
+      } catch (err) {
+        logger.error({ err }, 'Error shutting down Azure Monitor telemetry');
       } finally {
         process.exit(0);
       }

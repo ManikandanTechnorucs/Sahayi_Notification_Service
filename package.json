@@ -18,7 +18,9 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@azure/monitor-opentelemetry": "^1.20.0",
     "@azure/service-bus": "^7.9.5",
+    "@opentelemetry/api": "^1.9.1",
     "@prisma/adapter-mariadb": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "axios": "^1.16.0",

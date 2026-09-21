@@ -106,4 +106,6 @@ export const config = {
     .split(',')
     .map((c) => c.trim())
     .filter((c) => c.length > 0) as Array<'push' | 'email' | 'sms' | 'in_app'>,
+  /** Azure Application Insights / Monitor connection string (optional; telemetry disabled when unset) */
+  APPLICATIONINSIGHTS_CONNECTION_STRING: getOptionalEnv('APPLICATIONINSIGHTS_CONNECTION_STRING'),
 };
