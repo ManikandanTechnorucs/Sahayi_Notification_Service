@@ -14,12 +14,23 @@ type ErrorLike = Error & {
   errors?: Array<{ field: string; message: string }>;
 };
 
+function readAuthenticatedUserName(req: RequestWithTelemetry): string | undefined {
+  const user = (req as RequestWithTelemetry & { user?: { userName?: unknown } }).user;
+  if (!user || typeof user.userName !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = user.userName.trim();
+  return trimmed || undefined;
+}
+
 function trackFailedRequest(
   req: RequestWithTelemetry,
   statusCode: number,
   errorMessage: string,
   err: ErrorLike,
 ): void {
+  const userName = readAuthenticatedUserName(req);
   recordFailedApiRequest({
     serviceName: SERVICE_NAME,
     endpoint: req.originalUrl || req.url || 'unknown',
@@ -31,6 +42,7 @@ function trackFailedRequest(
     ...(err.name ? { errorName: err.name } : {}),
     ...(typeof req.startedAt === 'number' ? { durationMs: Date.now() - req.startedAt } : {}),
     ...(req.requestId ? { correlationId: req.requestId } : {}),
+    ...(userName ? { userName } : {}),
   });
 }
 

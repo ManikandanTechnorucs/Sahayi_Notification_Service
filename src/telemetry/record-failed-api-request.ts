@@ -9,6 +9,7 @@ export type FailedApiRequestDetails = {
   statusCode: number;
   errorMessage: string;
   errorName?: string;
+  userName?: string;
   occurredAt: string;
   durationMs?: number;
   traceId?: string;
@@ -31,11 +32,15 @@ export function recordFailedApiRequest(details: FailedApiRequestDetails): void {
   const activeTraceId = span.spanContext().traceId;
   const traceId = details.traceId || activeTraceId || undefined;
   const correlationId = details.correlationId || details.traceId || activeTraceId || undefined;
+  const userName = details.userName?.trim().slice(0, 150);
 
   span.setAttributes({
     'service.name': details.serviceName,
+    ...(userName ? { 'user.name': userName } : {}),
     'http.route': details.endpoint,
     'http.method': details.method,
+    'api.endpoint': details.endpoint,
+    'api.http_method': details.method,
     'http.status_code': details.statusCode,
     'error.message': details.errorMessage,
     'error.occurred_at': details.occurredAt,
