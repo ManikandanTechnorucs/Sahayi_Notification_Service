@@ -43,7 +43,7 @@ export class ValidationError extends AppError {
  * Caller is not authenticated.
  */
 export class UnauthorizedError extends AppError {
-  constructor(message = 'Unauthorized') {
-    super(message, 401, 'UNAUTHORIZED');
+  constructor(message = 'Unauthorized', code = 'UNAUTHORIZED') {
+    super(message, 401, code);
   }
 }

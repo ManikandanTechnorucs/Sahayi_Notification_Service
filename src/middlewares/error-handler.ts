@@ -64,8 +64,14 @@ export function errorHandler(
   }
 
   if (statusCode === 401) {
-    trackFailedRequest(req, statusCode, response.UNAUTHORIZED.message, err);
-    res.status(401).json(response.UNAUTHORIZED);
+    const superseded = err.code === 'SESSION_SUPERSEDED';
+    const message = superseded ? err.message : response.UNAUTHORIZED.message;
+    trackFailedRequest(req, statusCode, message, err);
+    res.status(401).json(
+      superseded
+        ? response.createError(err.message, 'SESSION_SUPERSEDED')
+        : response.UNAUTHORIZED,
+    );
     return;
   }
 
