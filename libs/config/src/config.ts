@@ -69,7 +69,7 @@ const parsePositiveIntEnv = (key: string, fallback: number): number => {
  */
 export const config = {
   DATABASE_URL: normalizeDatabaseUrl(getRequiredEnv('DATABASE_URL')),
-  JWT_SECRET: process.env.JWT_SECRET || 'asdkjhkjkkkh987879879879987khkas',
+  JWT_SECRET: getRequiredEnv('JWT_SECRET'),
   REMINDER_DEFAULT_STATUS_NAME: getOptionalEnv('REMINDER_DEFAULT_STATUS_NAME'),
   REMINDER_LIST_DEFAULT_STATUS_NAME:
     getOptionalEnv('REMINDER_LIST_DEFAULT_STATUS_NAME') ??

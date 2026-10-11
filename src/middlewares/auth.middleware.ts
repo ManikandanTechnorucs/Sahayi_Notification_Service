@@ -29,6 +29,19 @@ function isInternalServiceToken(token: string): boolean {
   return timingSafeEqual(expectedBuffer, actualBuffer);
 }
 
+function isJwtVerificationError(error: unknown): boolean {
+  if (!error || typeof error !== 'object' || !('name' in error)) {
+    return false;
+  }
+
+  const name = String((error as { name: unknown }).name);
+  return (
+    name === 'JsonWebTokenError' ||
+    name === 'TokenExpiredError' ||
+    name === 'NotBeforeError'
+  );
+}
+
 /**
  * Requires a valid Bearer JWT on the Authorization header.
  */
@@ -70,21 +83,25 @@ export async function requireAuth(
       return;
     }
 
-    await assertCurrentSession(
-      String(payload.id),
-      readAccessTokenSessionVersion(payload),
-    );
+    const sessionVersion = readAccessTokenSessionVersion(payload);
+
+    await assertCurrentSession(String(payload.id), sessionVersion);
 
     req.user = {
       id: String(payload.id),
       role: String(payload.role),
       ...(payload.purpose ? { purpose: payload.purpose } : {}),
-      ...(typeof payload.sv === 'number' ? { sv: payload.sv } : {}),
+      sv: sessionVersion,
     };
 
     next();
-  } catch {
-    res.status(401).json(response.UNAUTHORIZED);
+  } catch (error) {
+    if (isJwtVerificationError(error)) {
+      res.status(401).json(response.UNAUTHORIZED);
+      return;
+    }
+
+    next(error);
   }
 }
 

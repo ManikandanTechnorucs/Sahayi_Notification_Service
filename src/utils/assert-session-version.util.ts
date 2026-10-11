@@ -3,19 +3,42 @@ import { UnauthorizedError } from '../errors/app-error';
 
 const SESSION_SUPERSEDED_CODE = 'SESSION_SUPERSEDED';
 
+function coercePositiveSessionVersion(value: unknown): number | null {
+  let numeric: number;
+
+  if (typeof value === 'bigint') {
+    numeric = Number(value);
+  } else if (typeof value === 'number') {
+    numeric = value;
+  } else if (typeof value === 'string' && value.trim() !== '') {
+    numeric = Number(value.trim());
+  } else {
+    return null;
+  }
+
+  if (!Number.isInteger(numeric) || numeric <= 0) {
+    return null;
+  }
+
+  return numeric;
+}
+
+/**
+ * Missing `sv` on tokens issued before session versioning is treated as 1.
+ * A present numeric string or bigint is kept; it is not collapsed to 1.
+ */
 export const readAccessTokenSessionVersion = (payload: {
   sv?: unknown;
 }): number => {
-  return typeof payload.sv === 'number' &&
-    Number.isInteger(payload.sv) &&
-    payload.sv > 0
-    ? payload.sv
-    : 1;
+  if (payload.sv === undefined || payload.sv === null) {
+    return 1;
+  }
+
+  return coercePositiveSessionVersion(payload.sv) ?? 0;
 };
 
 function storedSessionVersion(value: unknown): number | null {
-  const currentVersion = Number(value);
-  return Number.isFinite(currentVersion) ? currentVersion : null;
+  return coercePositiveSessionVersion(value);
 }
 
 /**
