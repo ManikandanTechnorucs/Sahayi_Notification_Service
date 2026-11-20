@@ -1,5 +1,6 @@
 import { prisma } from '../../libs/db/src/prisma';
 import { logger } from '../../libs/logger/src/logger';
+import { selectDeliveryTarget } from '../utils/delivery-target';
 import { formatNotificationFailure } from '../utils/notification-failure';
 import type {
   DeliveredNotification,
@@ -280,25 +281,37 @@ export class ScheduledNotificationRepository {
   }
 
   /**
-   * Loads the user's primary FCM token when available.
+   * Loads the token for the user's active device.
+   * iOS snapshots the APNs token. Android snapshots the FCM token.
+   * users.FcmToken is the fallback and stays an FCM credential.
    */
   async findUserDeviceToken(userId: bigint): Promise<string | null> {
+    const device = await prisma.userdevicetoken.findFirst({
+      where: { UserId: userId, IsActive: true },
+      orderBy: [{ LastUsedAt: 'desc' }, { Id: 'desc' }],
+      select: { FcmToken: true, APNstoken: true, Platform: true },
+    });
+
+    if (device) {
+      const target = selectDeliveryTarget(device.Platform, device.FcmToken, device.APNstoken);
+      if (target) {
+        if (target.channel === 'fcm' && device.Platform.trim().toLowerCase() === 'ios') {
+          logger.warn(
+            { userId: userId.toString() },
+            'iOS device has no APNs token; schedule snapshot will use the FCM token',
+          );
+        }
+        return target.token;
+      }
+    }
+
     const user = await prisma.users.findUnique({
       where: { Id: userId },
       select: { FcmToken: true },
     });
 
-    if (user?.FcmToken) {
-      return user.FcmToken;
-    }
-
-    const device = await prisma.userdevicetoken.findFirst({
-      where: { UserId: userId, IsActive: true },
-      orderBy: { LastUsedAt: 'desc' },
-      select: { FcmToken: true },
-    });
-
-    return device?.FcmToken ?? null;
+    const profileToken = user?.FcmToken?.trim();
+    return profileToken ? profileToken : null;
   }
 
   /**

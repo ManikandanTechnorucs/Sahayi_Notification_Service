@@ -713,6 +713,8 @@ model userdevicetoken {
 
   FcmToken String @unique(map: "UX_UserDeviceToken_FcmToken") @db.VarChar(512)
 
+  APNstoken String? @db.VarChar(512)
+
   Platform String @default("unknown") @db.VarChar(20)
 
   DeviceId String? @db.VarChar(256)
