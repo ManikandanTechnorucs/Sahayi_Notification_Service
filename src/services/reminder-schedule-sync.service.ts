@@ -18,6 +18,10 @@ import {
   getUtcFireWindow,
 } from '../utils/reminder-schedule-time.util';
 import { DateTimeUtil } from '../utils/datetime.util';
+import {
+  buildScheduleSyncCancelReason,
+  NOTIFICATION_FAILURE_STAGES,
+} from '../utils/notification-failure';
 import type { ScheduledNotification } from '../../generated/prisma/client';
 
 type DesiredSchedule = {
@@ -126,7 +130,15 @@ export class ReminderScheduleSyncService {
           primary.Title !== desired.title || primary.Message !== desired.message;
 
         if (driftMs > REMINDER_SYNC_TIME_DRIFT_MS || contentChanged) {
-          await this.#scheduledNotificationService.cancel(primary.Id.toString());
+          await this.#scheduledNotificationService.cancel(
+            primary.Id.toString(),
+            buildScheduleSyncCancelReason({
+              kind: 'reschedule',
+              ...(driftMs > REMINDER_SYNC_TIME_DRIFT_MS ? { driftMs } : {}),
+              ...(contentChanged ? { contentChanged: true } : {}),
+            }),
+            NOTIFICATION_FAILURE_STAGES.SCHEDULE_SYNC,
+          );
           await this.#scheduledNotificationService.createInternal({
             userId: desired.userId,
             title: desired.title,
@@ -140,7 +152,11 @@ export class ReminderScheduleSyncService {
         }
 
         for (const duplicate of sortedMatches.slice(1)) {
-          await this.#scheduledNotificationService.cancel(duplicate.Id.toString());
+          await this.#scheduledNotificationService.cancel(
+            duplicate.Id.toString(),
+            buildScheduleSyncCancelReason({ kind: 'duplicate' }),
+            NOTIFICATION_FAILURE_STAGES.SCHEDULE_SYNC,
+          );
           cancelledCount += 1;
         }
 
@@ -153,7 +169,11 @@ export class ReminderScheduleSyncService {
             continue;
           }
 
-          await this.#scheduledNotificationService.cancel(schedule.Id.toString());
+          await this.#scheduledNotificationService.cancel(
+            schedule.Id.toString(),
+            buildScheduleSyncCancelReason({ kind: 'undesired' }),
+            NOTIFICATION_FAILURE_STAGES.SCHEDULE_SYNC,
+          );
           cancelledCount += 1;
         }
       }

@@ -1,6 +1,9 @@
 import { prisma } from '../../libs/db/src/prisma';
+import { logger } from '../../libs/logger/src/logger';
+import { formatNotificationFailure } from '../utils/notification-failure';
 import type {
   DeliveredNotification,
+  Prisma,
   ScheduledNotification,
   ScheduledNotificationStatus as ScheduledNotificationStatusType,
 } from '../../generated/prisma/client';
@@ -8,10 +11,7 @@ import {
   REMINDER_NOTIFICATION_TYPE_VALUES,
   ACTIVE_SCHEDULE_STATUSES,
 } from '../constants/reminder-notification.constants';
-import {
-  ERROR_MESSAGE_MAX_LENGTH,
-  ScheduledNotificationStatus,
-} from '../constants/scheduled-notification.constants';
+import { ScheduledNotificationStatus } from '../constants/scheduled-notification.constants';
 
 export type CreateScheduledNotificationRecord = {
   userId: bigint;
@@ -176,32 +176,41 @@ export class ScheduledNotificationRepository {
   /**
    * Marks a scheduled notification as CANCELLED.
    */
-  async cancelById(id: bigint): Promise<ScheduledNotification> {
-    return prisma.scheduledNotification.update({
+  async cancelById(id: bigint, stage: string, reason: string): Promise<ScheduledNotification> {
+    const errorMessage = formatNotificationFailure(stage, reason);
+    const existing = await prisma.scheduledNotification.findUnique({ where: { Id: id } });
+    const cancelled = await prisma.scheduledNotification.update({
       where: { Id: id },
       data: {
         Status: ScheduledNotificationStatus.CANCELLED,
+        ErrorMessage: errorMessage,
         UpdatedAt: new Date(),
       },
     });
+
+    if (existing) {
+      await recordNotificationStage(existing, stage, ScheduledNotificationStatus.CANCELLED, errorMessage);
+    }
+
+    return cancelled;
   }
 
   /**
    * Marks all active schedules for a child reminder as CANCELLED.
    */
-  async cancelByChildReminderId(childReminderId: bigint): Promise<number> {
-    const result = await prisma.scheduledNotification.updateMany({
-      where: {
+  async cancelByChildReminderId(
+    childReminderId: bigint,
+    stage: string,
+    reason: string,
+  ): Promise<number> {
+    return cancelActiveRows(
+      {
         ChildReminderId: childReminderId,
         Status: { in: ACTIVE_STATUSES },
       },
-      data: {
-        Status: ScheduledNotificationStatus.CANCELLED,
-        UpdatedAt: new Date(),
-      },
-    });
-
-    return result.count;
+      stage,
+      reason,
+    );
   }
 
   /**
@@ -220,34 +229,42 @@ export class ScheduledNotificationRepository {
   /**
    * Marks all active schedules for a user as CANCELLED.
    */
-  async cancelByUserId(userId: bigint): Promise<number> {
-    const result = await prisma.scheduledNotification.updateMany({
-      where: {
+  async cancelByUserId(userId: bigint, stage: string, reason: string): Promise<number> {
+    return cancelActiveRows(
+      {
         UserId: userId,
         Status: { in: ACTIVE_STATUSES },
       },
-      data: {
-        Status: ScheduledNotificationStatus.CANCELLED,
-        UpdatedAt: new Date(),
-      },
-    });
-
-    return result.count;
+      stage,
+      reason,
+    );
   }
 
   /**
    * Marks a scheduled notification as FAILED after a queue publish error.
    */
-  async markFailed(id: bigint, errorMessage: string): Promise<ScheduledNotification> {
-    return prisma.scheduledNotification.update({
+  async markFailed(
+    id: bigint,
+    reason: string,
+    stage = 'queue-publish',
+  ): Promise<ScheduledNotification> {
+    const errorMessage = formatNotificationFailure(stage, reason);
+    const existing = await prisma.scheduledNotification.findUnique({ where: { Id: id } });
+    const failed = await prisma.scheduledNotification.update({
       where: { Id: id },
       data: {
         Status: ScheduledNotificationStatus.FAILED,
         FailedAt: new Date(),
-        ErrorMessage: errorMessage.slice(0, ERROR_MESSAGE_MAX_LENGTH),
+        ErrorMessage: errorMessage,
         UpdatedAt: new Date(),
       },
     });
+
+    if (existing) {
+      await recordNotificationStage(existing, stage, ScheduledNotificationStatus.FAILED, errorMessage);
+    }
+
+    return failed;
   }
 
   /**
@@ -322,5 +339,74 @@ export class ScheduledNotificationRepository {
         IsRead: false,
       },
     });
+  }
+}
+
+async function cancelActiveRows(
+  where: Prisma.ScheduledNotificationWhereInput,
+  stage: string,
+  reason: string,
+): Promise<number> {
+  const errorMessage = formatNotificationFailure(stage, reason);
+  const rows = await prisma.scheduledNotification.findMany({ where });
+
+  if (rows.length === 0) {
+    return 0;
+  }
+
+  await prisma.scheduledNotification.updateMany({
+    where: { Id: { in: rows.map((row) => row.Id) } },
+    data: {
+      Status: ScheduledNotificationStatus.CANCELLED,
+      ErrorMessage: errorMessage,
+      UpdatedAt: new Date(),
+    },
+  });
+
+  await Promise.all(
+    rows.map((row) =>
+      recordNotificationStage(row, stage, ScheduledNotificationStatus.CANCELLED, errorMessage),
+    ),
+  );
+
+  return rows.length;
+}
+
+async function recordNotificationStage(
+  row: { Id: bigint; UserId: bigint; Title: string; Message: string },
+  stage: string,
+  status: string,
+  errorMessage: string,
+): Promise<void> {
+  try {
+    const messageId = `${row.Id.toString(36)}-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`.slice(0, 64);
+    await prisma.notificationlog.create({
+      data: {
+        MessageId: messageId,
+        CorrelationId: row.Id.toString().slice(0, 64),
+        UserId: row.UserId,
+        Module: 'notification',
+        EventType: `notification.${stage}`.slice(0, 100),
+        SourceEntityId: row.Id.toString().slice(0, 64),
+        Title: row.Title.slice(0, 200),
+        Body: row.Message.slice(0, 1000),
+        Channels: ['push'],
+        Status: status.slice(0, 20),
+        LastError: errorMessage.slice(0, 500),
+        PayloadSnapshot: {
+          stage,
+          scheduledNotificationId: row.Id.toString(),
+          errorMessage,
+        },
+        CompletedAt: new Date(),
+      },
+    });
+  } catch (error) {
+    logger.warn(
+      { err: error, scheduledNotificationId: row.Id.toString(), stage },
+      'failed to write notification stage log',
+    );
   }
 }

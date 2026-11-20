@@ -25,6 +25,7 @@ import { IMMEDIATE_NOTIFICATION_THRESHOLD_MS } from '../constants/app-notificati
 import { NOTIFICATION_MODULE } from '../constants/reminder-notification.constants';
 import { DataConversionUtil } from '../utils/data-conversion.util';
 import { DateTimeUtil } from '../utils/datetime.util';
+import { NOTIFICATION_FAILURE_STAGES } from '../utils/notification-failure';
 import { resolveScheduledEnqueueTime } from '../utils/reminder-schedule-time.util';
 
 export type InternalCreateScheduledNotificationInput = {
@@ -372,7 +373,11 @@ export class ScheduledNotificationService {
   /**
    * Cancels a single scheduled notification and its Azure sequence when present.
    */
-  async cancel(id: string): Promise<ScheduledNotificationResponseDto> {
+  async cancel(
+    id: string,
+    reason = 'cancelled by API request',
+    stage: string = NOTIFICATION_FAILURE_STAGES.API_CANCEL,
+  ): Promise<ScheduledNotificationResponseDto> {
     const parsedId = DataConversionUtil.parseBigInt(id);
 
     if (parsedId === null) {
@@ -395,7 +400,7 @@ export class ScheduledNotificationService {
 
     await this.#cancelAzureSchedule(existing.AzureMessageId);
 
-    const cancelled = await this.#repository.cancelById(parsedId);
+    const cancelled = await this.#repository.cancelById(parsedId, stage, reason);
 
     logger.info(
       {
@@ -412,7 +417,11 @@ export class ScheduledNotificationService {
   /**
    * Cancels all active schedules for a child reminder.
    */
-  async cancelByChildReminder(childReminderId: string): Promise<{ cancelledCount: number }> {
+  async cancelByChildReminder(
+    childReminderId: string,
+    reason = 'cancelled by child reminder API request',
+    stage: string = NOTIFICATION_FAILURE_STAGES.API_CANCEL,
+  ): Promise<{ cancelledCount: number }> {
     const parsedChildReminderId = DataConversionUtil.parseBigInt(childReminderId);
 
     if (parsedChildReminderId === null) {
@@ -426,7 +435,11 @@ export class ScheduledNotificationService {
       await this.#cancelAzureSchedule(schedule.AzureMessageId);
     }
 
-    const cancelledCount = await this.#repository.cancelByChildReminderId(parsedChildReminderId);
+    const cancelledCount = await this.#repository.cancelByChildReminderId(
+      parsedChildReminderId,
+      stage,
+      reason,
+    );
 
     logger.info(
       {
@@ -442,7 +455,11 @@ export class ScheduledNotificationService {
   /**
    * Cancels all active schedules for a user.
    */
-  async cancelByUser(userId: string): Promise<{ cancelledCount: number }> {
+  async cancelByUser(
+    userId: string,
+    reason = 'cancelled by user API request',
+    stage: string = NOTIFICATION_FAILURE_STAGES.API_CANCEL,
+  ): Promise<{ cancelledCount: number }> {
     const parsedUserId = DataConversionUtil.parseBigInt(userId);
 
     if (parsedUserId === null) {
@@ -455,7 +472,7 @@ export class ScheduledNotificationService {
       await this.#cancelAzureSchedule(schedule.AzureMessageId);
     }
 
-    const cancelledCount = await this.#repository.cancelByUserId(parsedUserId);
+    const cancelledCount = await this.#repository.cancelByUserId(parsedUserId, stage, reason);
 
     logger.info(
       {

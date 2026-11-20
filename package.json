@@ -9,7 +9,7 @@
     "start:notification": "node --use-system-ca -r ts-node/register src/server.ts",
     "start": "npm run start:notification",
     "dev": "nodemon --exec \"node --use-system-ca -r ts-node/register src/server.ts\"",
-    "test": "echo \"No tests configured\"",
+    "test": "jest --config jest.config.cjs",
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate dev"
   },
@@ -37,11 +37,14 @@
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@types/jest": "^29.5.14",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.7.0",
     "@types/swagger-ui-express": "^4.1.8",
+    "jest": "^30.4.2",
     "nodemon": "^3.1.14",
     "prisma": "^7.8.0",
+    "ts-jest": "^29.4.9",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3"
   }
