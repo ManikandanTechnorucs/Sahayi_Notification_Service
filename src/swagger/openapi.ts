@@ -69,6 +69,14 @@ export const openApiDocument = {
             example: '2026-07-18T10:30:00.000Z',
             description: 'Future date/time when the notification should be delivered (ISO-8601)',
           },
+          notificationAudioUrl: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 2000,
+            example: 'https://cdn.example.com/voices/reminder-on-time.m4a',
+            description:
+              'Optional voice audio location. Stored on the scheduled notification so the push service can load it by scheduled notification id. Omit when there is no audio.',
+          },
         },
       },
       ScheduledNotificationResponseDto: {
@@ -77,6 +85,12 @@ export const openApiDocument = {
           id: { type: 'string', example: '42' },
           userId: { type: 'string', example: '7' },
           deviceToken: { type: 'string', nullable: true, example: null },
+          notificationAudioUrl: {
+            type: 'string',
+            nullable: true,
+            example: 'https://cdn.example.com/voices/reminder-on-time.m4a',
+            description: 'Voice audio location stored for the push service. Null when no audio was supplied.',
+          },
           title: { type: 'string', example: 'Medication reminder' },
           message: { type: 'string', example: 'Time to take your evening medication' },
           status: {

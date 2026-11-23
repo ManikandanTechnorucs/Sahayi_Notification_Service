@@ -21,6 +21,7 @@ export type CreateScheduledNotificationRecord = {
   scheduledAt: Date;
   status: ScheduledNotificationStatusType;
   deviceToken?: string | null;
+  notificationAudioUrl?: string | null;
   childReminderId?: bigint | null;
   notificationType?: string | null;
 };
@@ -156,6 +157,7 @@ export class ScheduledNotificationRepository {
         ScheduledAt: data.scheduledAt,
         Status: data.status,
         DeviceToken: data.deviceToken ?? null,
+        NotificationAudioUrl: data.notificationAudioUrl ?? null,
         UpdatedAt: new Date(),
       },
     });

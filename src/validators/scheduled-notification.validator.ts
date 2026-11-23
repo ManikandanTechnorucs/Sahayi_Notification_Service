@@ -80,6 +80,15 @@ export const createScheduledNotificationSchema = {
             `screen must be at most ${VALIDATION_LIMITS.SCREEN_MAX} characters`,
           )
           .optional(),
+        notificationAudioUrl: z
+          .string()
+          .trim()
+          .min(1, 'notificationAudioUrl must not be empty')
+          .max(
+            VALIDATION_LIMITS.NOTIFICATION_AUDIO_URL_MAX,
+            `notificationAudioUrl must be at most ${VALIDATION_LIMITS.NOTIFICATION_AUDIO_URL_MAX} characters`,
+          )
+          .optional(),
       })
       .strict(),
   ),
