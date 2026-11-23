@@ -37,6 +37,7 @@ export type InternalCreateScheduledNotificationInput = {
   notificationType?: string;
   clientEventId?: string;
   screen?: string;
+  notificationAudioUrl?: string;
 };
 
 /**
@@ -237,6 +238,9 @@ export class ScheduledNotificationService {
       ...(input.notificationType !== undefined ? { notificationType: input.notificationType } : {}),
       ...(input.clientEventId !== undefined ? { clientEventId: input.clientEventId } : {}),
       ...(input.screen !== undefined ? { screen: input.screen } : {}),
+      ...(input.notificationAudioUrl !== undefined
+        ? { notificationAudioUrl: input.notificationAudioUrl }
+        : {}),
     });
 
     return row;
@@ -269,6 +273,7 @@ export class ScheduledNotificationService {
       scheduledAt: input.scheduledAt,
       status: ScheduledNotificationStatus.SCHEDULED,
       deviceToken,
+      notificationAudioUrl: input.notificationAudioUrl ?? null,
       childReminderId: input.childReminderId ?? null,
       notificationType: input.notificationType ?? null,
     });
@@ -520,6 +525,7 @@ export class ScheduledNotificationService {
     ChildReminderId: bigint | null;
     NotificationType: string | null;
     DeviceToken: string | null;
+    NotificationAudioUrl: string | null;
     Title: string;
     Message: string;
     Status: string;
@@ -539,6 +545,7 @@ export class ScheduledNotificationService {
       childReminderId: row.ChildReminderId?.toString() ?? null,
       notificationType: row.NotificationType,
       deviceToken: row.DeviceToken,
+      notificationAudioUrl: row.NotificationAudioUrl,
       title: row.Title,
       message: row.Message,
       status: row.Status,

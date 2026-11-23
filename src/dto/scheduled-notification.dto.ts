@@ -11,6 +11,8 @@ export type CreateScheduledNotificationDto = {
   notificationType?: string;
   clientEventId?: string;
   screen?: string;
+  /** Voice audio location stored for the push service. Omitted when there is no audio. */
+  notificationAudioUrl?: string;
 };
 
 export type ScheduledNotificationResponseDto = {
@@ -19,6 +21,7 @@ export type ScheduledNotificationResponseDto = {
   childReminderId: string | null;
   notificationType: string | null;
   deviceToken: string | null;
+  notificationAudioUrl: string | null;
   title: string;
   message: string;
   status: string;
